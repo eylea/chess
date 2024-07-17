@@ -1,0 +1,4 @@
+POST /game -> return game id
+
+ws://<>/game/<game_id> -> establish connection with game id
+

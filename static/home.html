@@ -3,14 +3,17 @@
 
 <head>
     <script src="index.js"></script>
+
+    <!--htmx-->
+    <script src="https://unpkg.com/htmx.org/dist/htmx.js"></script>
 </head>
 
 <canvas id="chessBoard"></canvas>
-<script>
-    const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
-    let board = fenToBoard(fen);
-    console.log(board);
-    renderChessBoard('chessBoard', fen);
-</script>
+
+<body>
+    <button hx-get="/game">
+        Get Game
+    </button>
+</body>
 
 </html>

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 
+	"embed"
 	"net/http"
 )
 
@@ -34,10 +35,20 @@ func serveHome(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	http.ServeFile(w, r, "home.html")
+	http.Redirect(w, r, "/static/home.html", http.StatusFound)
 }
 
 func serveCreateGame(gh *GameHub, w http.ResponseWriter, r *http.Request) {
+	log.Println(r.URL)
+	if r.URL.Path != "/game" {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	g := gh.NewGame()
 	go g.run()
 
@@ -51,10 +62,16 @@ func serveCreateGame(gh *GameHub, w http.ResponseWriter, r *http.Request) {
 
 var addr = flag.String("addr", ":8080", "http service address")
 
+//go:embed static/*
+var staticFs embed.FS
+
 func main() {
 	flag.Parse()
 
 	gh := NewGameHub()
+
+	fs := http.FileServer(http.FS(staticFs))
+	http.Handle("/static/", fs)
 
 	http.HandleFunc("/", serveHome)
 	http.HandleFunc("/game", func(w http.ResponseWriter, r *http.Request) {

@@ -1,3 +1,5 @@
+let validMoves = [];
+
 // converts a position string like 'b8' to an array index like [1, 0]
 // param {string} position - The position string to convert
 // returns {Array<number>} - The array index
@@ -127,6 +129,12 @@ const renderChessBoard = (function() {
     return function renderChessBoard(elementID, fen) {
         const canvas = document.getElementById(elementID);
         const ctx = canvas.getContext('2d');
+
+
+        if (!fen) {
+            console.log('')
+            fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
+        }
         const board = fenToBoard(fen);
         const boardSize = board.length;
         const cellSize = 100;
@@ -135,6 +143,7 @@ const renderChessBoard = (function() {
 
         canvas.width = boardWidth;
         canvas.height = boardHeight;
+
 
 
         // Draw the board
@@ -275,6 +284,8 @@ const renderChessBoard = (function() {
                 const startRow = Math.floor(moveStart.y / cellSize);
                 const endCol = Math.floor(moveEnd.x / cellSize);
                 const endRow = Math.floor(moveEnd.y / cellSize);
+                const move = indexToPosition([startCol, startRow]) + indexToPosition([endCol, endRow]);
+                console.log(move);
 
                 const piece = board[startRow][startCol];
                 board[startRow][startCol] = '';

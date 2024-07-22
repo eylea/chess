@@ -5,7 +5,6 @@ import (
 	"flag"
 	"log"
 
-	"embed"
 	"net/http"
 )
 
@@ -25,18 +24,17 @@ func serveGame(hub *Game, w http.ResponseWriter, r *http.Request) {
 	go client.readPump()
 }
 
-func serveHome(w http.ResponseWriter, r *http.Request) {
-	log.Println(r.URL)
-	if r.URL.Path != "/" {
-		http.Error(w, "Not found", http.StatusNotFound)
-		return
-	}
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	http.Redirect(w, r, "/static/home.html", http.StatusFound)
-}
+// func serveHome(w http.ResponseWriter, r *http.Request) {
+// 	if r.URL.Path != "/" {
+// 		http.Error(w, "Not found", http.StatusNotFound)
+// 		return
+// 	}
+// 	if r.Method != http.MethodGet {
+// 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+// 		return
+// 	}
+// 	http.ServeFile(w, r, "static/index.html")
+// }
 
 func serveCreateGame(gh *GameHub, w http.ResponseWriter, r *http.Request) {
 	log.Println(r.URL)
@@ -62,18 +60,13 @@ func serveCreateGame(gh *GameHub, w http.ResponseWriter, r *http.Request) {
 
 var addr = flag.String("addr", ":8080", "http service address")
 
-//go:embed static/*
-var staticFs embed.FS
-
 func main() {
 	flag.Parse()
 
 	gh := NewGameHub()
 
-	fs := http.FileServer(http.FS(staticFs))
-	http.Handle("/static/", fs)
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer((http.Dir("static")))))
 
-	http.HandleFunc("/", serveHome)
 	http.HandleFunc("/game", func(w http.ResponseWriter, r *http.Request) {
 		serveCreateGame(gh, w, r)
 	})
@@ -89,5 +82,7 @@ func main() {
 		serveGame(g, w, r)
 	})
 
-	http.ListenAndServe(*addr, nil)
+	if err := http.ListenAndServe(*addr, nil); err != nil {
+		log.Fatal("ListenAndServe:", err)
+	}
 }

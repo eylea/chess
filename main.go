@@ -6,6 +6,8 @@ import (
 	"log"
 
 	"net/http"
+
+	"github.com/eylea/chess/static"
 )
 
 // serveGame handles websocket requests from the peer.
@@ -63,10 +65,11 @@ var addr = flag.String("addr", ":8080", "http service address")
 func main() {
 	flag.Parse()
 
+	fs := static.GetFS()
+
+	http.Handle("/", http.FileServer(http.FS(fs)))
+
 	gh := NewGameHub()
-
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer((http.Dir("static")))))
-
 	http.HandleFunc("/game", func(w http.ResponseWriter, r *http.Request) {
 		serveCreateGame(gh, w, r)
 	})

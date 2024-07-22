@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <script src="index.js"></script>
+</head>
+
+<canvas id="chessBoard"></canvas>
+<script>
+    const fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
+    let board = fenToBoard(fen);
+    console.log(board);
+    renderChessBoard('chessBoard', fen);
+</script>
+
+</html>

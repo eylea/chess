@@ -1,25 +1,31 @@
 package main
 
-import "github.com/notnil/chess"
+import (
+	"github.com/notnil/chess"
+)
 
-type MessageType int
+type MessageType string
 
 const (
-	Move MessageType = iota
-	Resign
-	OfferDraw
-	AcceptDraw
-	DeclineDraw
+	Move        MessageType = "move"
+	Resign                  = "resign"
+	OfferDraw               = "offer_draw"
+	AcceptDraw              = "accept_draw"
+	DeclineDraw             = "decline_draw"
 )
 
 // Message is a struct that represents a message sent by a client.
 type Message struct {
 	Player Player      `json:"player"`
 	Type   MessageType `json:"type"`
-	Data   []byte      `json:"data"`
+	Data   int         `json:"data"`
 }
 
-func NewMessage(player Player, messageType MessageType, data []byte) Message {
+func (m *Message) toMove(g *chess.Game) *chess.Move {
+	return g.ValidMoves()[m.Data]
+}
+
+func NewMessage(player Player, messageType MessageType, data int) Message {
 	return Message{
 		Player: player,
 		Type:   messageType,

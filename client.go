@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"log"
 	"net/http"
 	"time"
@@ -60,7 +61,14 @@ func (c *Client) readPump() {
 			break
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		c.game.broadcast <- message
+
+		var msg Message
+		if err = json.Unmarshal(message, &msg); err != nil {
+			log.Println("error unmarshalling message", err)
+			continue
+		}
+
+		c.game.broadcast <- msg
 	}
 }
 

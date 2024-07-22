@@ -1,4 +1,6 @@
-let validMoves = [];
+const WHITE_CELL_COLOR = '#EBECD0';
+const BLACK_CELL_COLOR = '#779556';
+const HIGHLIGHT_CELL_COLOR = '#ED7E6A';
 
 // converts a position string like 'b8' to an array index like [1, 0]
 // param {string} position - The position string to convert
@@ -126,18 +128,16 @@ const renderChessBoard = (function() {
         imagesLoaded = true;
     });
 
-    return function renderChessBoard(elementID, fen) {
+    return function renderChessBoard(elementID, fen, legalMoves, handleMoveCallback) {
         const canvas = document.getElementById(elementID);
         const ctx = canvas.getContext('2d');
 
-
         if (!fen) {
-            console.log('')
             fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
         }
         const board = fenToBoard(fen);
         const boardSize = board.length;
-        const cellSize = 100;
+        const cellSize = 80;
         const boardWidth = cellSize * boardSize;
         const boardHeight = cellSize * boardSize;
 
@@ -145,15 +145,18 @@ const renderChessBoard = (function() {
         canvas.height = boardHeight;
 
 
-
         // Draw the board
+        let boardDrawn = false;
         function drawBoard() {
+            if (boardDrawn) {
+                return;
+            }
             for (let i = 0; i < boardSize; i++) {
                 for (let j = 0; j < boardSize; j++) {
                     if ((i + j) % 2 === 0) {
-                        ctx.fillStyle = '#EBECD0';
+                        ctx.fillStyle = WHITE_CELL_COLOR;
                     } else {
-                        ctx.fillStyle = '#779556';
+                        ctx.fillStyle = BLACK_CELL_COLOR;
                     }
                     ctx.fillRect(i * cellSize, j * cellSize, cellSize, cellSize);
                     if (board[j][i] !== '') {
@@ -162,6 +165,7 @@ const renderChessBoard = (function() {
                     }
                 }
             }
+            boardDrawn = true;
         }
 
         function drawPieces() {
@@ -227,9 +231,35 @@ const renderChessBoard = (function() {
             return (dx === 2 && dy === 1) || (dx === 1 && dy === 2);
         }
 
+
+        let highlightedSquares = new Set();
+        // Draw a red square around the given position
+        // param {Object} pos - The position to highlight
         function drawHighlightSquare(pos) {
-            ctx.fillStyle = 'red';
+            const row = Math.floor(pos.y / cellSize);
+            const col = Math.floor(pos.x / cellSize);
+            const piece = board[row][col];
+            const rowcolString = indexToPosition([row, col]);
+
+            if (highlightedSquares.has(rowcolString)) {
+                highlightedSquares.delete(rowcolString);
+                if ((row + col) % 2 === 0) {
+                    ctx.fillStyle = WHITE_CELL_COLOR;
+                }
+                else {
+                    ctx.fillStyle = BLACK_CELL_COLOR;
+                }
+                ctx.fillRect(row * cellSize, col * cellSize, cellSize, cellSize);
+                return;
+            }
+
+            ctx.fillStyle = HIGHLIGHT_CELL_COLOR;
             ctx.fillRect(pos.x - cellSize / 2, pos.y - cellSize / 2, cellSize, cellSize);
+            if (piece !== '') {
+                const piece = pieceImageElements[board[row][col]];
+                ctx.drawImage(piece, col * cellSize, row * cellSize, cellSize, cellSize);
+            }
+            highlightedSquares.add(rowcolString);
         }
 
         function drawKnightMoveArrow(start, end) {
@@ -258,17 +288,23 @@ const renderChessBoard = (function() {
         let moveStart = null;
         canvas.addEventListener('mousedown', (event) => {
             if (event.button === 0) { // Left click only
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                // Redraw the board and pieces
-                drawBoard();
-                drawPieces();
-
                 moveStart = getGridPosition(event);
             }
             if (event.button === 2) { // Right click only
                 arrowStart = getGridPosition(event);
             }
         });
+
+        document.addEventListener('keyup', (event) => {
+            if (event.code === 'Escape') {
+                console.log('Escape key pressed');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawBoard();
+                drawPieces();
+                moveStart = null;
+                arrowStart = null;
+            }
+        })
 
         canvas.addEventListener('mouseup', (event) => {
             if (event.button === 0) {
@@ -284,16 +320,8 @@ const renderChessBoard = (function() {
                 const startRow = Math.floor(moveStart.y / cellSize);
                 const endCol = Math.floor(moveEnd.x / cellSize);
                 const endRow = Math.floor(moveEnd.y / cellSize);
-                const move = indexToPosition([startCol, startRow]) + indexToPosition([endCol, endRow]);
-                console.log(move);
 
-                const piece = board[startRow][startCol];
-                board[startRow][startCol] = '';
-                board[endRow][endCol] = piece;
-
-                drawBoard();
-                drawPieces();
-                moveStart = null;
+                handleMove(startCol, startRow, endCol, endRow);
             }
 
             if (event.button === 2) { // Right click only
@@ -319,7 +347,27 @@ const renderChessBoard = (function() {
             event.preventDefault();
         });
 
+        function handleMove(startCol, startRow, endCol, endRow) {
+            const move = indexToPosition([startCol, startRow]) + indexToPosition([endCol, endRow]);
+            if (!isValidMove(move, legalMoves)) {
+                console.log('Invalid move:', move);
+                return;
+            }
+
+            validMoveIndex = legalMoves.indexOf(move);
+
+            const piece = board[startRow][startCol];
+            board[startRow][startCol] = '';
+            board[endRow][endCol] = piece;
+
+            drawBoard();
+            drawPieces();
+            moveStart = null;
+            handleMoveCallback(validMoveIndex);
+        }
+
         if (imagesLoaded) {
+            drawBoard()
             drawPieces();
         } else {
             imageLoadPromise.then(() => {

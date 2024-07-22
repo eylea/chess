@@ -21,7 +21,7 @@ const (
 
 type Game struct {
 	clients    map[*Client]bool
-	broadcast  chan []byte
+	broadcast  chan Message
 	register   chan *Client
 	unregister chan *Client
 	game       *chess.Game
@@ -31,7 +31,7 @@ type Game struct {
 func newGame() *Game {
 	return &Game{
 		clients:    make(map[*Client]bool),
-		broadcast:  make(chan []byte),
+		broadcast:  make(chan Message),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		game:       chess.NewGame(),
@@ -44,18 +44,34 @@ func (h *Game) run() {
 		select {
 		case client := <-h.register:
 			log.Println("registering client")
+
+			msg := NewServerMessage(h.game.FEN(),
+				lo.Map(h.game.ValidMoves(),
+					func(m *chess.Move, _ int) string {
+						return m.String()
+					}),
+				h.game.Position().Turn())
+			en, err := json.Marshal(msg)
+			if err != nil {
+				log.Println("error marshalling message", err)
+				en = []byte{}
+			}
+			client.send <- []byte(en)
 			h.clients[client] = true
+
 		case client := <-h.unregister:
 			if _, ok := h.clients[client]; ok {
 				log.Println("unregistering client")
 				delete(h.clients, client)
 				close(client.send)
 			}
+
 		case message := <-h.broadcast:
-			log.Printf("broadcasting msg %s", message)
-			if err := h.game.MoveStr(string(message)); err != nil {
-				log.Println("invalid move", string(message))
+			log.Printf("broadcasting message: %+v", message)
+			if err := h.game.Move(message.toMove(h.game)); err != nil {
+				log.Println("error moving piece", err)
 			}
+
 			log.Printf("game state: %s", h.game.Position().Board().Draw())
 
 			msg := NewServerMessage(h.game.FEN(),

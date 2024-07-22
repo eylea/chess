@@ -11,22 +11,56 @@
     <button id="getGameButton">
         Get Game
     </button>
-
+    <canvas id="chessBoard"></canvas>
     <script>
         function handleGetGame(e) {
-
             e.preventDefault()
             fetch('http://localhost:8080/game')
                 .then(response => {
-                    return response.json()
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json(); // Call the function to parse the response as JSON
                 })
                 .then(data => {
-                    console.log(data)
+                    const ws = new WebSocket("ws://localhost:8080/game/" + encodeURIComponent(data.game_id));
+                    console.log(data.game_id);
+
+                    ws.addEventListener("open", (e) => {
+                        console.log("Connection established");
+                    });
+
+                    ws.addEventListener("message", (e) => {
+                        console.log("Message received", e.data);
+                        const data = JSON.parse(e.data);
+                        renderChessBoard("chessBoard", data.fen, data.valid_moves,
+                            function (moveIdx) {
+                                console.log(moveIdx)
+                                ws.send(JSON.stringify({
+                                    type: "move",
+                                    data: moveIdx
+                                }));
+                            }
+                        );
+                    });
+
+                    ws.addEventListener("error", (e) => {
+                        console.error("WebSocket error", e);
+                    });
+
+                    ws.addEventListener("close", (e) => {
+                        console.log("WebSocket connection closed", e);
+                    });
+
                 })
+                .catch(error => {
+                    console.error('There was a problem with the fetch operation:', error);
+                });
         }
         getGameButton = document.getElementById('getGameButton');
         getGameButton.addEventListener('click', handleGetGame);
     </script>
+
 </body>
 
 </html>

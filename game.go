@@ -4,19 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"sync"
 
 	"github.com/google/uuid"
 	"github.com/notnil/chess"
 	"github.com/samber/lo"
-)
-
-type Player int
-
-const (
-	None Player = iota
-	White
-	Black
 )
 
 type Game struct {
@@ -26,6 +17,7 @@ type Game struct {
 	unregister chan *Client
 	game       *chess.Game
 	id         string
+	players    map[Player]*Client
 }
 
 func newGame() *Game {
@@ -39,100 +31,111 @@ func newGame() *Game {
 	}
 }
 
-func (h *Game) run() {
+func (g *Game) run() {
 	for {
 		select {
-		case client := <-h.register:
-			log.Println("registering client")
-
-			msg := NewServerMessage(h.game.FEN(),
-				lo.Map(h.game.ValidMoves(),
-					func(m *chess.Move, _ int) string {
-						return m.String()
-					}),
-				h.game.Position().Turn())
-			en, err := json.Marshal(msg)
-			if err != nil {
-				log.Println("error marshalling message", err)
-				en = []byte{}
-			}
-			client.send <- []byte(en)
-			h.clients[client] = true
-
-		case client := <-h.unregister:
-			if _, ok := h.clients[client]; ok {
+		case client := <-g.register:
+			g.handleRegisterClient(client)
+		case client := <-g.unregister:
+			if _, ok := g.clients[client]; ok {
 				log.Println("unregistering client")
-				delete(h.clients, client)
+				delete(g.clients, client)
 				close(client.send)
 			}
-
-		case message := <-h.broadcast:
-			log.Printf("broadcasting message: %+v", message)
-			if err := h.game.Move(message.toMove(h.game)); err != nil {
-				log.Println("error moving piece", err)
-			}
-
-			log.Printf("game state: %s", h.game.Position().Board().Draw())
-
-			msg := NewServerMessage(h.game.FEN(),
-				lo.Map(h.game.ValidMoves(),
-					func(m *chess.Move, _ int) string {
-						return m.String()
-					}),
-				h.game.Position().Turn())
+		case message := <-g.broadcast:
+			msg := g.handleClientMove(&message)
 			en, err := json.Marshal(msg)
 			if err != nil {
 				log.Println("error marshalling message", err)
 				en = []byte{}
 			}
-			for client := range h.clients {
+
+			for client := range g.clients {
 				select {
 				case client.send <- []byte(en):
 				default:
 					close(client.send)
-					delete(h.clients, client)
+					delete(g.clients, client)
 				}
 			}
 		}
 	}
 }
 
-type GameHub struct {
-	mu    *sync.Mutex
-	games map[string]*Game
-}
+func (g *Game) handleClientMove(msg *Message) *ServerMessage {
+	log.Printf("broadcasting message: %+v", msg)
+	move, found := lo.Find(g.game.ValidMoves(), func(m *chess.Move) bool {
+		return m.String() == msg.Data
+	})
 
-func NewGameHub() *GameHub {
-	return &GameHub{
-		games: make(map[string]*Game),
-		mu:    &sync.Mutex{},
-	}
-}
-
-func (gh *GameHub) NewGame() *Game {
-	gh.mu.Lock()
-	defer gh.mu.Unlock()
-	g := newGame()
-	gh.games[g.id] = g
-	return g
-}
-
-func (gh *GameHub) DeleteGame(id string) {
-	gh.mu.Lock()
-	defer gh.mu.Unlock()
-
-	if _, ok := gh.games[id]; ok {
-		delete(gh.games, id)
-	}
-}
-
-func (gh *GameHub) GetGame(id string) (*Game, error) {
-	gh.mu.Lock()
-	defer gh.mu.Unlock()
-
-	if g, ok := gh.games[id]; ok {
-		return g, nil
+	if !found {
+		err := fmt.Errorf("move: %s not found in valid moves: %v", msg.Data, g.game.ValidMoves())
+		log.Println(err)
+		return NewServerError(err)
 	}
 
-	return nil, fmt.Errorf("gamehub: could not find game with id: %s", id)
+	if err := g.game.Move(move); err != nil {
+		log.Println("error moving", err)
+		return NewServerError(err)
+	}
+
+	log.Printf("game state: %s", g.game.Position().Board().Draw())
+
+	return NewServerMoveMessage(
+		g.game.FEN(),
+		g.getLegalMoves(),
+	)
+
+}
+
+func (g *Game) getLegalMoves() []string {
+	return lo.Map(
+		g.game.ValidMoves(),
+		func(m *chess.Move, _ int) string {
+			return m.String()
+		})
+}
+
+func (g *Game) handleRegisterClient(client *Client) {
+	log.Println("registering client")
+	// TODO allow spectators
+	if len(g.clients) == 2 {
+		log.Println("game is full")
+		en, err := NewServerError(fmt.Errorf("game is full")).Type.MarshalJSON()
+		if err != nil {
+			log.Println("error marshalling message", err)
+			en = []byte{}
+		}
+		client.send <- en
+		close(client.send)
+	}
+
+	msg := &ServerMessage{
+		Type: Initial,
+		Data: &ServerInitialMessage{
+			Fen:        g.game.FEN(),
+			LegalMoves: g.getLegalMoves(),
+		},
+	}
+
+	if len(g.clients) == 0 {
+		color := randomPlayer()
+		g.players[color] = client
+		msg.Data.(*ServerInitialMessage).Player = color
+	} else {
+		for color, c := range g.players {
+			if c == nil {
+				g.players[color] = client
+				msg.Data.(*ServerInitialMessage).Player = color
+			}
+		}
+	}
+
+	en, err := json.Marshal(msg)
+	if err != nil {
+		log.Println("error marshalling message", err)
+		en = []byte{}
+	}
+	client.send <- []byte(en)
+	g.clients[client] = true
 }

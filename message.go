@@ -1,31 +1,81 @@
 package main
 
-import (
-	"github.com/notnil/chess"
-)
+import "encoding/json"
 
-type MessageType string
+type MessageType int
 
 const (
-	Move        MessageType = "move"
-	Resign                  = "resign"
-	OfferDraw               = "offer_draw"
-	AcceptDraw              = "accept_draw"
-	DeclineDraw             = "decline_draw"
+	Move MessageType = iota
+	Resign
+	OfferDraw
+	AcceptDraw
+	DeclineDraw
+	GameEnd
+	Error
+	Initial
 )
+
+func (mt MessageType) String() string {
+	switch mt {
+	case Move:
+		return "move"
+	case Resign:
+		return "resign"
+	case OfferDraw:
+		return "offer_draw"
+	case AcceptDraw:
+		return "accept_draw"
+	case DeclineDraw:
+		return "decline_draw"
+	case GameEnd:
+		return "game_end"
+	case Error:
+		return "error"
+	case Initial:
+		return "initial"
+	default:
+		return "unknown"
+	}
+}
+
+func (mt MessageType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(mt.String())
+}
+
+func (mt *MessageType) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+
+	switch s {
+	case "move":
+		*mt = Move
+	case "resign":
+		*mt = Resign
+	case "offer_draw":
+		*mt = OfferDraw
+	case "accept_draw":
+		*mt = AcceptDraw
+	case "decline_draw":
+		*mt = DeclineDraw
+	case "error":
+		*mt = Error
+	default:
+		*mt = -1
+	}
+
+	return nil
+}
 
 // Message is a struct that represents a message sent by a client.
 type Message struct {
 	Player Player      `json:"player"`
 	Type   MessageType `json:"type"`
-	Data   int         `json:"data"`
+	Data   string      `json:"data"`
 }
 
-func (m *Message) toMove(g *chess.Game) *chess.Move {
-	return g.ValidMoves()[m.Data]
-}
-
-func NewMessage(player Player, messageType MessageType, data int) Message {
+func NewMessage(player Player, messageType MessageType, data string) Message {
 	return Message{
 		Player: player,
 		Type:   messageType,
@@ -34,15 +84,52 @@ func NewMessage(player Player, messageType MessageType, data int) Message {
 }
 
 type ServerMessage struct {
-	Fen        string      `json:"fen"`
-	ValidMoves []string    `json:"valid_moves"`
-	Turn       chess.Color `json:"turn"`
+	Type MessageType `json:"type"`
+	Data interface{} `json:"data"`
 }
 
-func NewServerMessage(fen string, validMoves []string, turn chess.Color) ServerMessage {
-	return ServerMessage{
-		Fen:        fen,
-		ValidMoves: validMoves,
-		Turn:       turn,
+func NewServerMessage(t MessageType, data interface{}) *ServerMessage {
+	return &ServerMessage{
+		Type: t,
+		Data: data,
+	}
+}
+
+type ServerMoveMessage struct {
+	Fen        string   `json:"fen"`
+	LegalMoves []string `json:"moves"`
+}
+
+type ServerInitialMessage struct {
+	Fen        string   `json:"fen"`
+	LegalMoves []string `json:"moves"`
+	Player     Player   `json:"player"`
+}
+
+func NewServerInitialMessage(fen string, moves []string, player Player) *ServerMessage {
+	return &ServerMessage{
+		Type: Initial,
+		Data: &ServerInitialMessage{
+			Fen:        fen,
+			LegalMoves: moves,
+			Player:     player,
+		},
+	}
+}
+
+func NewServerMoveMessage(fen string, moves []string) *ServerMessage {
+	return &ServerMessage{
+		Type: Move,
+		Data: &ServerMoveMessage{
+			Fen:        fen,
+			LegalMoves: moves,
+		},
+	}
+}
+
+func NewServerError(err error) *ServerMessage {
+	return &ServerMessage{
+		Type: Error,
+		Data: err.Error(),
 	}
 }

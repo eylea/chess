@@ -38,10 +38,9 @@ const (
 )
 
 type Client struct {
-	send  chan []byte
-	game  *Game
-	conn  *websocket.Conn
-	color Player
+	send chan []byte
+	game *Game
+	conn *websocket.Conn
 }
 
 func (c *Client) readPump() {

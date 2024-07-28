@@ -2,64 +2,95 @@
 <html lang="en">
 
 <head>
-    <script src="index.js"></script>
+    <!-- <script src="index.js"></script> -->
+    <style>
+        table {
+            margin: 0 auto;
+            border-collapse: collapse;
+            width: 80vh;
+            height: 80vh;
+        }
+
+        td {
+            width: 10vh;
+            height: 10vh;
+            text-align: center;
+            /* Horizontal centering */
+            vertical-align: middle;
+            /* Vertical centering */
+            font-size: 6vh;
+            /* Adjust font size as needed */
+            border: 1px solid black;
+            /* Add a border to the cells */
+        }
+
+        .piece {
+            cursor: pointer;
+            width: 80%;
+            height: 80%;
+        }
+
+        .white {
+            background-color: #f0d9b5;
+        }
+
+        .black {
+            background-color: #b58863;
+        }
+
+        .no-select {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+    </style>
 </head>
 
 
+<!-- <body> -->
+<!--     <h1>Chess Game</h1> -->
+<!--     <button id="getGameButton"> -->
+<!--         Get Game -->
+<!--     </button> -->
+<!--     <canvas id="chessBoard"></canvas> -->
+<!--     <script> -->
+<!--         getGameButton = document.getElementById('getGameButton'); -->
+<!--         getGameButton.addEventListener('click', handleGetGame); -->
+<!--     </script> -->
+<!-- </body> -->
+
 <body>
-    <h1>Chess Game</h1>
-    <button id="getGameButton">
-        Get Game
-    </button>
-    <canvas id="chessBoard"></canvas>
+    <script src="chess.js"></script>
+    <div id="container"></div>
+    <button id="get-game-button">Get Game</button>
+    <button id="reset-button">Reset Position</button>
     <script>
-        function handleGetGame(e) {
-            e.preventDefault()
+        const handleGetGame = () => {
             fetch('http://localhost:8080/game')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json(); // Call the function to parse the response as JSON
-                })
+                .then(response => response.json())
                 .then(data => {
-                    const ws = new WebSocket("ws://localhost:8080/game/" + encodeURIComponent(data.game_id));
-                    console.log(data.game_id);
+                    const container = document.getElementById('container');
+                    const ws = new WebSocket('ws://localhost:8080/game/' + data.game_id);
+                    ws.onopen = () => {
+                        console.log('Connected to server');
+                    };
 
-                    ws.addEventListener("open", (e) => {
-                        console.log("Connection established");
-                    });
-
-                    ws.addEventListener("message", (e) => {
-                        console.log("Message received", e.data);
-                        const data = JSON.parse(e.data);
-                        renderChessBoard("chessBoard", data.fen, data.valid_moves,
-                            function (moveIdx) {
-                                console.log(moveIdx)
-                                ws.send(JSON.stringify({
-                                    type: "move",
-                                    data: moveIdx
-                                }));
-                            }
-                        );
-                    });
-
-                    ws.addEventListener("error", (e) => {
-                        console.error("WebSocket error", e);
-                    });
-
-                    ws.addEventListener("close", (e) => {
-                        console.log("WebSocket connection closed", e);
-                    });
-
-                })
-                .catch(error => {
-                    console.error('There was a problem with the fetch operation:', error);
+                    ws.onmessage = (message) => {
+                        // Only create the ChessBoard instance once upon receiving the first message
+                        if (!container.chessBoard) {
+                            container.chessBoard = new ChessBoard(container, makeHandleOnMove(ws));
+                        }
+                        handleOnMessage(container.chessBoard)(message);
+                    };
                 });
-        }
-        getGameButton = document.getElementById('getGameButton');
-        getGameButton.addEventListener('click', handleGetGame);
+        };
+
+        const button = document.getElementById('get-game-button');
+        button.addEventListener('click', handleGetGame);
+
     </script>
+
 
 </body>
 

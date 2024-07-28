@@ -28,6 +28,7 @@ func newGame() *Game {
 		unregister: make(chan *Client),
 		game:       chess.NewGame(),
 		id:         uuid.New().String(),
+		players:    make(map[Player]*Client),
 	}
 }
 
@@ -138,4 +139,8 @@ func (g *Game) handleRegisterClient(client *Client) {
 	}
 	client.send <- []byte(en)
 	g.clients[client] = true
+}
+
+func (g *Game) String() string {
+	return fmt.Sprintf("id: %s\tclients: %d\tfen: %s", g.id, len(g.clients), g.game.FEN())
 }

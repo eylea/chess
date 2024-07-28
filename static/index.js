@@ -24,10 +24,11 @@ function indexToPosition(index) {
 }
 
 
+// Check if a move is valid
+// param {string} move - The move to check
+// param {Set<string>} validMoves - The set of valid moves
 function isValidMove(move, validMoves) {
-    return validMoves.some(validMove => {
-        return validMove === move;
-    });
+    return validMoves.has(move);
 }
 
 // Convert a FEN string to a 2D array representing the board
@@ -128,7 +129,7 @@ const renderChessBoard = (function() {
         imagesLoaded = true;
     });
 
-    return function renderChessBoard(elementID, fen, legalMoves, handleMoveCallback) {
+    return function renderChessBoard(elementID, fen, handleMoveCallback, legalMovesSet) {
         const canvas = document.getElementById(elementID);
         const ctx = canvas.getContext('2d');
 
@@ -349,12 +350,10 @@ const renderChessBoard = (function() {
 
         function handleMove(startCol, startRow, endCol, endRow) {
             const move = indexToPosition([startCol, startRow]) + indexToPosition([endCol, endRow]);
-            if (!isValidMove(move, legalMoves)) {
-                console.log('Invalid move:', move);
+            if (!legalMovesSet.has(move)) {
+                console.log('Invalid move:', move, 'not in', legalMovesSet);
                 return;
             }
-
-            validMoveIndex = legalMoves.indexOf(move);
 
             const piece = board[startRow][startCol];
             board[startRow][startCol] = '';
@@ -363,7 +362,7 @@ const renderChessBoard = (function() {
             drawBoard();
             drawPieces();
             moveStart = null;
-            handleMoveCallback(validMoveIndex);
+            handleMoveCallback(move);
         }
 
         if (imagesLoaded) {
@@ -378,3 +377,58 @@ const renderChessBoard = (function() {
     };
 })();
 
+
+
+function handleGetGame(e) {
+    e.preventDefault()
+    fetch('/game')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json(); // Call the function to parse the response as JSON
+        })
+        .then(data => {
+            const ws = new WebSocket("ws://localhost:8080/game/" + encodeURIComponent(data.game_id));
+            console.log(data.game_id);
+
+            ws.addEventListener("open", (e) => {
+                console.log("Connection established");
+            });
+
+            ws.addEventListener("message", (e) => {
+                const data = JSON.parse(e.data);
+                console.log(data)
+                switch (data.type) {
+                    case "move":
+                        renderChessBoard("chessBoard",
+                            data.fen,
+                            function(move) {
+                                console.log(move)
+                                ws.send(JSON.stringify({
+                                    type: "move",
+                                    data: move
+                                }));
+                            },
+                            new Set(data.valid_moves)
+                        );
+                        break;
+                    case "error":
+                        alert(data.message);
+                        break;
+                }
+            });
+
+            ws.addEventListener("error", (e) => {
+                console.error("WebSocket error", e);
+            });
+
+            ws.addEventListener("close", (e) => {
+                console.log("WebSocket connection closed", e);
+            });
+
+        })
+        .catch(error => {
+            console.error('There was a problem with the fetch operation:', error);
+        });
+}

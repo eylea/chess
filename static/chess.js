@@ -1,5 +1,5 @@
-const WHITE = 'w';
-const BLACK = 'b';
+const WHITE = 'white';
+const BLACK = 'black';
 
 const PIECES = {
     'r': '♜',
@@ -97,16 +97,26 @@ class ChessBoard {
          * chessBoard.legalMoves = legalMoves;
          */
         this.legalMoves = legalMoves;
+
+
+        /**
+        * @property {string} color - The color to move
+        * @private
+        * @type {string}
+        */
+        this.color = color;
     }
 
     /**
      * Set the position of the board
      * @param {string} fen - The FEN string representing the position to set
      * @param {Set<string>} legalMoves - The set of legal moves
+     * @param {string} color - The color of the player
      */
-    update(fen = this.fen, legalMoves = this.legalMoves) {
+    update(fen = this.fen, legalMoves = this.legalMoves, color = this.color) {
         this.fen = fen;
         this.legalMoves = legalMoves
+        this.color = color;
         this._drawPosition();
     }
 
@@ -288,16 +298,10 @@ class ChessBoard {
      * @private
      */
     _handleMove = (startCell, endCell) => {
-        // const startIndices = this._getCellIndices(startCell);
-        // const endIndices = this._getCellIndices(endCell);
-        // const startAlgebraic = this._indexToAlgebraic(
-        //     startIndices.row,
-        //     startIndices.column
-        // );
-        // const endAlgebraic = this._indexToAlgebraic(
-        //     endIndices.row,
-        //     endIndices.column
-        // );
+        if (!this._isTurn()) {
+            console.log('Not your turn');
+            return;
+        }
 
         const startAlgebraic = startCell.dataset.algebraic;
         const endAlgebraic = endCell.dataset.algebraic;
@@ -380,8 +384,23 @@ class ChessBoard {
         return allCells;
     }
 
-    _isTurn = (fen) => {
-        return fen.split(' ')[1] === 'w';
+    /** Function to determine the color to move
+        * @returns {boolean} - The color to move
+        * @private
+    */
+    _isTurn = () => {
+        const turn = () => {
+            switch (this.fen.split(' ')[1]) {
+                case 'w':
+                    return WHITE;
+                case 'b':
+                    return BLACK;
+                default:
+                    return WHITE;
+            }
+        }
+
+        return turn() == this.color;
     }
 }
 
@@ -410,13 +429,20 @@ const makeHandleOnMove = (ws) => (start, end) => handleOnMove(ws, start, end);
  */
 const handleOnMessage = (chessBoard) => (event) => {
     const data = JSON.parse(event.data);
+    if (!data) {
+        console.error('Invalid data:', event.data);
+        return;
+    }
+    let legalMoves;
     console.log('handleOnMessage:', event.data)
     switch (data.type) {
+        case 'initial':
+            legalMoves = new Set(data.data.moves);
+            chessBoard.update(data.data.fen, legalMoves, data.data.player);
+            break
         case 'move':
-            if (data.data) {
-                const legalMoves = new Set(data.data.moves);
-                chessBoard.update(data.data.fen, legalMoves);
-            }
+            legalMoves = new Set(data.data.moves);
+            chessBoard.update(data.data.fen, legalMoves);
             break;
         case 'error':
             console.error(data.error);

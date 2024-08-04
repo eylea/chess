@@ -1,5 +1,5 @@
-const WHITE = 'white';
-const BLACK = 'black';
+const WHITE = 'w';
+const BLACK = 'b';
 
 const PIECES = {
     'r': '♜',
@@ -31,513 +31,428 @@ const PIECE_FILES = {
     'P': 'pawn-w.svg',
 };
 
-
 const DEFAULT_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
 
+/**
+  * @returns {Array} An array of valid moves for the current player
+  */
+let getValidMoves = () => {
+    return [];
+}
+
+let getColor = () => {
+    return '';
+}
+
+let getCurrentPlayer = () => {
+    return '';
+}
+
+let getFen = () => {
+    return '';
+}
+
+let sendMove = function(move) { console.log('Move:', move) };
+
+let lastMove = null;
+
+const getGame = () => {
+    const gameIdInput = document.getElementById('game-id-input');
+    if (!gameIdInput) {
+        console.error('Game ID input not found');
+        return;
+    }
+
+    const gameId = gameIdInput.value.trim();
+
+    if (gameId) {
+        connectToGame(gameId);
+    } else {
+        fetchNewGame();
+    }
+}
+
+const fetchNewGame = () => {
+    console.log('Fetching new game...');
+    fetch('/game')
+        .then(response => {
+            if (!response.ok) throw new Error('Failed to fetch game');
+            return response.json();
+        })
+        .then(data => connectToGame(data.game_id))
+        .catch(error => console.error(error));
+}
+
+const connectToGame = (gameId) => {
+    console.log(`Connecting to game: ${gameId}`);
+    const url = new URL(window.location.href);
+    const ws = new WebSocket(`ws://${url.host}/game/${gameId}`);
+
+    ws.onmessage = handleOnMessage;
+    ws.onopen = () => updateGameIdHeader(gameId);
+
+    sendMove = makeSendMove(ws);
+}
+
+const updateGameIdHeader = (gameId) => {
+    let header = document.getElementById('game_id');
+    if (!header) {
+        document.body.insertAdjacentHTML('afterbegin', `<h1 id="game_id">Game ID: ${gameId}</h1>`);
+    } else {
+        header.textContent = `Game ID: ${gameId}`;
+    }
+}
+
+const loadAssets = async () => {
+    const assets = {};
+    const loadPromises = Object.entries(PIECE_FILES).map(([key, value]) => {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.src = `./${value}`;
+            img.alt = key;
+            img.dataset.piece = key;
+            img.className = 'piece no-select';
+            img.onload = () => {
+                assets[key] = img;
+                resolve({});
+            };
+            img.onerror = () => {
+                console.error(`Failed to load image: ${value}`);
+                resolve({}); // Resolve even on error to continue loading other assets
+            };
+        });
+    });
+
+    await Promise.all(loadPromises);
+    return assets;
+};
+
+const drawBoard = (container) => {
+    if (!container) {
+        throw new Error('Container not found');
+    }
+
+    let board = container.querySelector('#board');
+    if (board) {
+        container.removeChild(board);
+    }
+
+    board = document.createElement('table');
+    board.id = 'board';
+
+    const isBlack = getColor() === BLACK;
+
+    for (let i = 0; i < 8; i++) {
+        const row = document.createElement('tr');
+        for (let j = 0; j < 8; j++) {
+            const cell = document.createElement('td');
+            cell.className = (i + j) % 2 === 0 ? 'white' : 'black';
+            const file = isBlack ? 7 - j : j;
+            const rank = isBlack ? i + 1 : 8 - i;
+            cell.dataset.algebraic = `${String.fromCharCode(97 + file)}${rank}`;
+            row.appendChild(cell);
+        }
+        board.appendChild(row);
+    }
+
+    container.appendChild(board);
+
+    return board;
+}
+
+const drawPieces = (board, assets, fen = DEFAULT_FEN) => {
+    const rows = fen.split('/');
+    const isBlack = getColor() === BLACK;
+
+    for (let i = 0; i < 8; i++) {
+        const row = rows[isBlack ? 7 - i : i];
+        let col = 0;
+        for (let j = 0; j < row.length; j++) {
+            const char = row[j];
+            console.log("char", char)
+            if (isNaN(char)) {
+                const cell = board.rows[i].cells[isBlack ? 7 - col : col];
+                let img = assets[char]
+                if (!img) {
+                    console.error(`Failed to find asset for piece: ${char}`);
+                    img = document.createElement('span');
+                    img.textContent = PIECES[char];
+                    img.className = 'piece no-select';
+                    continue
+                }
+                img.classList.add('piece');
+                cell.appendChild(img.cloneNode(true));
+                col++;
+            } else {
+                col += parseInt(char);
+            }
+        }
+    }
+
+    return board;
+}
+
+const isCastlingMove = (startSquare, endSquare) => {
+    const castlingMoves = {
+        'e1g1': true, // White kingside
+        'e1c1': true, // White queenside
+        'e8g8': true, // Black kingside
+        'e8c8': true  // Black queenside
+    };
+    return castlingMoves[`${startSquare}${endSquare}`] || false;
+};
+
+const getRookCastlingSquares = (endSquare) => {
+    const rookMoves = {
+        'g1': { start: 'h1', end: 'f1' }, // White kingside
+        'c1': { start: 'a1', end: 'd1' }, // White queenside
+        'g8': { start: 'h8', end: 'f8' }, // Black kingside
+        'c8': { start: 'a8', end: 'd8' }  // Black queenside
+    };
+    return rookMoves[endSquare] || null;
+};
+
+const movePiece = (board, startSquare, endSquare) => {
+    const startCell = board.querySelector(`td[data-algebraic="${startSquare}"]`);
+    const endCell = board.querySelector(`td[data-algebraic="${endSquare}"]`);
+    const piece = startCell.querySelector('.piece');
+
+    if (piece) {
+        endCell.innerHTML = '';
+        endCell.appendChild(piece);
+    }
+};
+
+// New function to highlight the last move
+const highlightLastMove = (board, move) => {
+    // Remove previous highlights
+    board.querySelectorAll('.highlight').forEach(cell => cell.classList.remove('highlight'));
+
+    // Highlight new move
+    const startSquare = move.substring(0, 2);
+    const endSquare = move.substring(2, 4);
+
+    const startCell = board.querySelector(`td[data-algebraic="${startSquare}"]`);
+    const endCell = board.querySelector(`td[data-algebraic="${endSquare}"]`);
+
+    if (startCell && endCell) {
+        startCell.classList.add('highlight');
+        endCell.classList.add('highlight');
+    }
+};
 
 /**
- * ChessBoard class to create and manage a chess board
- * @example
- * Create a new ChessBoard with the default position
- * const container = document.getElementById('chess-board-container');
- * const chessBoard = new ChessBoard(container);
- */
-class ChessBoard {
-    /**
-     * Create a new ChessBoard
-     * @param {HTMLElement} container - The container element to append the board to
-     * @param {string} [fen=DEFAULT_FEN] - The FEN string representing the position to set.
-     * @param {function(string, string): void} [onMove] - The function to call when a move is made
-     * @param {Set<string>} [legalMoves] - The set of legal moves
-     * @param {string} [color=WHITE] - The color to move
-     */
-    constructor(
-        container,
-        onMove = (start, end) => { console.log(start, end) },
-        fen = DEFAULT_FEN,
-        legalMoves = new Set(),
-        color = WHITE
-    ) {
-        /**
-         * @property {string} fen - The FEN string representing the position of the board
-         */
-        this.fen = fen;
+  * Returns an array of valid cells from a given cell
+  * @param {string} position - The algebraic position of the cell
+  * @returns {Array} An array of valid moves from the given cell
+  */
+const getValidCellsFromCell = (position) => {
+    const validMoves = getValidMoves();
+    return validMoves.filter(move => move.startsWith(position)).map(move => move.substring(2));
+}
 
-        /**
-         * @property {HTMLTableElement} board - The created board element
-         */
-        this.board = document.createElement('table');
-        this.board.className = 'no-select'
-        container.appendChild(this.board);
-
-        /**
-         * @property {Map<string, HTMLImageElement>} assets - The loaded assets
-         * @private
-         */
-        this.assets = {};
-        this._loadAssets();
-
-        this._boardInitialized = false;
-        this._initializeBoard();
-        this._drawPosition();
-        /**
-         * @property {function(string, string): void} onMove - The function to call when a move is made
-         * @private
-         * @type {function(string, string): void}
-         * @example
-         * const onMove = (start, end) => console.log(start, end);
-         */
-        this.onMove = onMove;
-        /**
-         * @property {Set<string>} legalMoves - The set of legal moves
-         * @private
-         * @type {Set<string>}
-         * @example
-         * const legalMoves = new Set(['e2e4', 'd2d4']);
-         * chessBoard.legalMoves = legalMoves;
-         */
-        this.legalMoves = legalMoves;
-
-
-        /**
-        * @property {string} color - The color to move
-        * @private
-        * @type {string}
-        */
-        this.color = color;
-
-
-        this.cellSize = 50;
+const drawValidMoves = (board, position) => {
+    const cell = board.querySelector(`td[data-algebraic="${position}"]`);
+    const piece = cell.querySelector('.piece');
+    if (!piece) {
+        console.error('No piece found in cell:', position);
+    }
+    const pieceColor = piece.dataset.piece === piece.dataset.piece.toLowerCase() ? BLACK : WHITE;
+    if (pieceColor !== getColor()) {
+        console.log('Not your piece');
+        return
     }
 
-    /**
-     * Set the position of the board
-     * @param {string} fen - The FEN string representing the position to set
-     * @param {Set<string>} legalMoves - The set of legal moves
-     * @param {string} color - The color of the player
-     */
-    update(fen = this.fen, legalMoves = this.legalMoves, color = this.color) {
-        this.fen = fen;
-        this.legalMoves = legalMoves
-        this.color = color;
-        if (fen.split(' ')[1] != this.color) {
-            this._drawPosition();
-        }
-    }
+    const validCells = getValidCellsFromCell(position);
+    validCells.forEach(cell => {
+        const targetCell = board.querySelector(`td[data-algebraic="${cell}"]`);
+        targetCell.classList.add('valid-move');
+    });
+}
 
-    /**
-     * Reset the board
-     * @returns {ChessBoard} - The ChessBoard instance
-     */
-    reset() {
-        this.fen = DEFAULT_FEN;
-        this._drawPosition();
-        return this;
-    }
+const clearValidMoves = () => {
+    document.querySelectorAll('.valid-move').forEach(cell => cell.classList.remove('valid-move'));
+}
 
-    _loadAssets() {
-        const assets = Object.entries(PIECE_FILES);
-        assets.forEach(([key, value]) => {
-            const img = document.createElement('img');
-            img.src = `./${value}`;
-            img.alt = PIECES[key];
-            img.className = 'piece';
-            this.assets[key] = img;
-        });
+const addPieceEventListeners = (board) => {
+    const pieces = board.querySelectorAll('.piece');
+    pieces.forEach((img) => {
+        let isDragging = false;
+        let originalCell;
 
-        Promise.all(Object.values(this.assets).map((img) => {
-            return new Promise((resolve, reject) => {
-                img.onload = resolve;
-                img.onerror = reject;
-            });
-        }
-        )).then(() => {
-            console.log('Assets loaded');
-        }).catch((error) => {
-            console.error('Error loading assets:', error);
-        });
-    }
+        const handleMouseDown = (e) => {
+            isDragging = true;
+            originalCell = img.parentElement;
+            img.style.cursor = 'grabbing';
+            img.style.position = 'absolute';
+            img.style.zIndex = 1000;
+            img.style.left = `${e.clientX - img.width / 2}px`;
+            img.style.top = `${e.clientY - img.height / 2}px`;
+            drawValidMoves(board, originalCell.dataset.algebraic)
+        };
 
-    /**
-     * Initialize the chess board by creating rows and cells
-     * @private
-     */
-    _initializeBoard() {
-        for (let i = 0; i < 8; i++) {
-            const row = document.createElement('tr');
-            this.board.appendChild(row);
-
-            for (let j = 0; j < 8; j++) {
-                const cell = document.createElement('td');
-                cell.className = this._getCellColor(i, j);
-                cell.dataset.algebraic = this._indexToAlgebraic(i, j);
-                row.appendChild(cell);
+        const handleMouseMove = (e) => {
+            if (isDragging) {
+                img.style.left = `${e.clientX - img.width / 2}px`;
+                img.style.top = `${e.clientY - img.height / 2}px`;
             }
-        }
+        };
 
-        this._initializeCellSelection()
-    }
-
-    /**
-     * Draw the position on the board based on the FEN string
-     * @private
-     */
-    _drawPosition() {
-        const position = this._fenToBoard(this.fen);
-        for (let i = 0; i < 8; i++) {
-            for (let j = 0; j < 8; j++) {
-                const cell = this.board.rows[i].cells[j];
-                const piece = position[i][j];
-                cell.childNodes.forEach(child => child.remove());
-                if (this.assets[piece]) {
-                    const img = this.assets[piece].cloneNode(true)
-                    let isDragging = false;
-                    let offsetX, offsetY;
-                    let startCell, endCell;
-                    img.style.width = `${this.cellSize}px`;
-                    img.style.height = `${this.cellSize}px`;
-
-                    img.addEventListener('dragstart', (e) => {
-                        e.preventDefault();
-                    })
-
-                    img.addEventListener('mousedown', (e) => {
-                        isDragging = true;
-                        img.style.position = 'absolute';
-                        img.style.cursor = 'grabbing';
-
-                        // Calculate the offset
-                        offsetX = e.clientX - img.getBoundingClientRect().left;
-                        offsetY = e.clientY - img.getBoundingClientRect().top;
-
-                        // Ensure the image follows the cursor at the start of dragging
-                        img.style.left = `${e.clientX - img.width / 2}px`;
-                        img.style.top = `${e.clientY - img.height / 2}px`;
-
-                        startCell = document.elementFromPoint(e.clientX, e.clientY).closest('td');
-                        console.log('Start cell:', startCell);
-                    });
-
-                    document.addEventListener('mousemove', (e) => {
-                        if (isDragging) {
-                            img.style.left = `${e.clientX - img.width / 2}px`;
-                            img.style.top = `${e.clientY - img.height / 2}px`;
-                        }
-                    });
-
-                    document.addEventListener('mouseup', (e) => {
-                        isDragging = false;
-                        img.style.cursor = 'grab';
-                        endCell = document.elementFromPoint(e.clientX, e.clientY).closest('td');
-                        console.log('end cell:', endCell);
-                        if (startCell !== endCell) {
-                            this._handleMove(startCell, endCell);
-                        }
-                    });
-                    cell.appendChild(img);
-
+        const handleMouseUp = (e) => {
+            clearValidMoves();
+            if (isDragging) {
+                isDragging = false;
+                img.style.cursor = 'grab';
+                img.style.position = 'static';
+                img.style.zIndex = '';
+                const targetElement = document.elementFromPoint(e.clientX, e.clientY);
+                const cell = targetElement.closest('td');
+                if (!cell) {
+                    originalCell.appendChild(img);
+                    return;
                 }
+                const startSquare = originalCell.dataset.algebraic;
+                const endSquare = cell.dataset.algebraic;
+                const move = `${startSquare}${endSquare}`;
+                const validMoves = getValidMoves();
+
+                if (!validMoves.includes(move)) {
+                    console.log("Invalid move ", move);
+                    console.log("Valid moves", validMoves);
+                    originalCell.appendChild(img);
+                    return;
+                }
+
+                if (getCurrentPlayer() !== getColor()) {
+                    console.log('Not your turn');
+                    return;
+                }
+
+                movePiece(board, startSquare, endSquare);
+
+                if (isCastlingMove(startSquare, endSquare)) {
+                    const rookSquares = getRookCastlingSquares(endSquare);
+                    if (rookSquares) {
+                        movePiece(board, rookSquares.start, rookSquares.end);
+                    }
+                }
+
+                sendMove(move);
+
+
+                // Highlight the move
+                highlightLastMove(board, move);
             }
-        }
-    }
+        };
 
-    /**
-     * Get the cell color based on its position
-     * @param {number} row - The row index
-     * @param {number} col - The column index
-     * @returns {string} - The class name representing the cell color
-     * @private
-     * @static
-     */
-    _getCellColor(row, col) {
-        return (row + col) % 2 === 0 ? 'white' : 'black';
-    }
+        img.addEventListener('mousedown', handleMouseDown);
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
 
-    /**
-     * @typedef {Object} CellIndices
-     * @property {number} row - The row index of the cell
-     * @property {number} column - The column index of the cell
-     */
+        img.addEventListener('dragstart', (e) => {
+            e.preventDefault();
+        });
+    });
+};
 
-    /**
-     * Get the indices of a cell
-     * @param {HTMLTableCellElement} cell - The cell to get indices for
-     * @returns {CellIndices} - An object containing the row and column indices
-     * @private
-     * @static
-     */
-    _getCellIndices = (cell) => {
-        const row = cell.parentElement.rowIndex;
-        const column = cell.cellIndex;
-        return { row, column };
+const handleOnMessage = (event) => {
+    console.log('Message received:', event.data);
+    const data = JSON.parse(event.data);
+
+    const handlers = {
+        initial: handleInitialMessage,
+        move: handleMoveMessage,
+        error: handleErrorMessage,
+        gameover: handleGameOverMessage
     };
 
-    /**
-     * Initialize cell selection on the board
-     * @private
-     */
-    _initializeCellSelection() {
-        const cells = this._getAllCells();
-        this.cellSize = cells[0].getBoundingClientRect().width;
+    const handler = handlers[data.type] || (() => console.warn(`Unhandled message type: ${data.type}`));
+    handler(data.data);
+};
 
-        /**
-         * Log the start and end cells of a selection
-         * @param {HTMLTableCellElement} start - The start cell of the selection
-         * @param {HTMLTableCellElement} end - The end cell of the selection
-         * @returns {void}
-         */
-        const logCells = (start, end) => {
-            const startIndices = this._getCellIndices(start);
-            const startAlgebraic = this._indexToAlgebraic(
-                startIndices.row,
-                startIndices.column
-            );
-            const endIndices = this._getCellIndices(end);
-            const endAlgebraic = this._indexToAlgebraic(
-                endIndices.row,
-                endIndices.column
-            );
-            console.log('Start Cell Indices:', startIndices, 'Algebraic:', startAlgebraic);
-            console.log('End Cell Indices:', endIndices, 'Algebraic:', endAlgebraic);
-        };
+const handleInitialMessage = (data) => {
+    getColor = () => data.player[0];
+    updateGameState(data.fen, data.moves);
+    initializeBoard();
+};
 
-        /**
-         * Add mouse event handlers to the cells
-         * @param {Array<HTMLTableCellElement>} cells - The cells to add event handlers to
-         * @returns {void}
-         */
-        const addMouseEventHandlers = (cells) => {
-            let startCell = null;
-            let endCell = null;
+const handleMoveMessage = (data) => {
+    updateGameState(data.fen, data.moves);
+    const board = document.getElementById('board');
+    movePiece(board, data.move.substring(0, 2), data.move.substring(2, 4));
 
-            /**
-             * Handle the mousedown event
-             * @param {MouseEvent} event - The mousedown event
-             * @returns {void}
-             */
-            const handleMouseDown = (event) => {
-                startCell = event.target.closest('td');
-            };
+    // Highlight the last move
+    highlightLastMove(board, data.move);
 
-            /**
-             * Handle the mouseup event
-             * @param {MouseEvent} event - The mouseup event
-             * @returns {void}
-             */
-            const handleMouseUp = (event) => {
-                endCell = event.target.closest('td');
-
-                if ((startCell && endCell) && (startCell !== endCell)) {
-                    this._handleMove(startCell, endCell);
-                }
-            };
-
-            cells.forEach(cell => {
-                cell.addEventListener('mousedown', handleMouseDown);
-                cell.addEventListener('mouseup', handleMouseUp);
-            });
-        };
-
-        addMouseEventHandlers(cells);
+    // Check if the game is over
+    if (data.moves.length === 0) {
+        handleGameOverMessage(getCurrentPlayer());
     }
+};
 
-    /**
-     * Handle a move event
-     * @param {HTMLTableCellElement} startCell - The start cell of the move
-     * @param {HTMLTableCellElement} endCell - The end cell of the move
-     * @private
-     */
-    _handleMove = (startCell, endCell) => {
-        if (!this._isTurn()) {
+const handleErrorMessage = (message) => {
+    alert(message);
+};
+
+const handleGameOverMessage = (loser) => {
+    const winner = loser === WHITE ? BLACK : WHITE;
+    const messageElement = document.createElement('div');
+    messageElement.id = 'game-over-message';
+    messageElement.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        font-size: 24px;
+        text-align: center;
+        z-index: 1001;
+    `;
+    messageElement.innerHTML = `
+        <h2>Game Over!</h2>
+        <p>${winner === WHITE ? 'White' : 'Black'} wins!</p>
+        <button id="new-game-btn">Start New Game</button>
+    `;
+    document.body.appendChild(messageElement);
+
+    document.getElementById('new-game-btn').addEventListener('click', () => {
+        document.body.removeChild(messageElement);
+        fetchNewGame();
+    });
+};
+
+const updateGameState = (fen, moves) => {
+    getFen = () => fen;
+    getCurrentPlayer = () => fen.split(' ')[1];
+    getValidMoves = () => moves;
+};
+
+const initializeBoard = () => {
+    const container = document.getElementById('container');
+    loadAssets().then((assets) => {
+        const board = drawBoard(container);
+        drawPieces(board, assets, getFen().split(' ')[0]);
+        addPieceEventListeners(board);
+    });
+};
+
+const makeSendMove = (ws) => {
+    const sendMove = (move) => {
+        if (getCurrentPlayer() !== getColor()) {
             console.log('Not your turn');
             return;
         }
 
-        const startAlgebraic = startCell.dataset.algebraic;
-        const endAlgebraic = endCell.dataset.algebraic;
-        if (!startAlgebraic || !endAlgebraic) {
-            console.log('Invalid move:', startAlgebraic, endAlgebraic);
-            return;
+        const msg = {
+            type: 'move',
+            data: move,
+            player: getColor()
         }
-
-        if (!this.legalMoves.has(startAlgebraic + endAlgebraic)) {
-            console.log('Illegal move:', startAlgebraic + endAlgebraic);
-            return;
-        }
-
-        this._movePiece(startCell, endCell);
-
-        this.onMove(startAlgebraic, endAlgebraic);
+        ws.send(JSON.stringify(msg));
     }
 
-    /**
-      * Move a piece on the board
-      * @param {HTMLTableCellElement} startCell - The start cell of the move
-      * @param {HTMLTableCellElement} endCell - The end cell of the move
-      * @private
-      */
-    _movePiece = (startCell, endCell) => {
-        // remove the piece from the start cell
-        const startPiece = startCell.querySelector('.piece');
-        if (!startPiece) {
-            console.log('No piece to move');
-            return;
-        }
-        startPiece.remove();
-
-        // remove the piece from the end cell if it exists
-        const endPiece = endCell.querySelector('.piece');
-        if (endPiece) {
-            endPiece.remove();
-        }
-
-
-        // move the piece to the end cell
-        endCell.appendChild(startPiece);
-
-    }
-
-    /** Convert a FEN string to a 2D array representing the board
-      * @param {string} fen - The FEN string to convert
-      * @returns {Array<Array<string>>} - A 2D array representing the board
-      * @private
-      * @static
-      */
-    _fenToBoard = (fen) => {
-        // Split the FEN string into its constituent parts
-        let parts = fen.split(' ');
-        let boardPart = parts[0];
-
-        // Split the board part by rows
-        let rows = boardPart.split('/');
-
-        // Initialize the board array
-        let board = [];
-
-        // Process each row
-        rows.forEach(row => {
-            let boardRow = [];
-            for (let char of row) {
-                if (isNaN(+char)) {
-                    // If the character is a piece, add it to the row
-                    boardRow.push(char);
-                } else {
-                    // If the character is a number, add that many empty squares to the row
-                    for (let i = 0; i < parseInt(char); i++) {
-                        boardRow.push('');
-                    }
-                }
-            }
-            // Add the processed row to the board
-            board.push(boardRow);
-        });
-
-        return board;
-    }
-
-    /** Convert a cell index to algebraic notation
-     * @param {number} row - The row index
-     * @param {number} col - The column index
-     * @returns {string} - The algebraic notation for the cell
-     * @private
-     * @static
-     */
-    _indexToAlgebraic = (row, col) => {
-        const letters = 'abcdefgh';
-        return letters[col] + (8 - row);
-    }
-
-
-    /** Function to get all cells of the table using map
-      * @returns {Array<HTMLTableCellElement>} - An array of all the cell contents
-      * @private
-      */
-    _getAllCells = () => {
-        // Get all rows in the table
-        const rows = Array.from(this.board.getElementsByTagName('tr'));
-
-        // Use map to iterate over rows and cells, then flatten the result
-        const allCells = rows.map(row => Array.from(row.getElementsByTagName('td'))).flat();
-
-        return allCells;
-    }
-
-    /** Function to determine the color to move
-        * @returns {boolean} - The color to move
-        * @private
-    */
-    _isTurn = () => {
-        const turn = () => {
-            switch (this.fen.split(' ')[1]) {
-                case 'w':
-                    return WHITE;
-                case 'b':
-                    return BLACK;
-                default:
-                    return WHITE;
-            }
-        }
-
-        return turn() == this.color;
-    }
-}
-
-/** Function to handle a move event
-  * @param {WebSocket} ws - The WebSocket connection
-  * @param {string} start - The start square of the move
-  * @param {string} end - The end square of the move
-  * @returns {void}
-  */
-const handleOnMove = (ws, start, end) => {
-    const data = JSON.stringify({ 'type': 'move', 'data': start + end });
-    console.log('handleOnMove:', data);
-    ws.send(data);
-}
-
-/** Function to create a handler for the onMove event
- * @param {WebSocket} ws - The WebSocket connection
- * @returns {function(string, string): void} - The handler function
- */
-const makeHandleOnMove = (ws) => (start, end) => handleOnMove(ws, start, end);
-
-
-/** Function to handle a message event
- * @param {ChessBoard} chessBoard - The ChessBoard instance
- * @returns {function(MessageEvent): void} - The handler function
- */
-const handleOnMessage = (chessBoard) => (event) => {
-    const data = JSON.parse(event.data);
-    if (!data) {
-        console.error('Invalid data:', event.data);
-        return;
-    }
-    let legalMoves;
-    console.log('handleOnMessage:', event.data)
-    switch (data.type) {
-        case 'initial':
-            legalMoves = new Set(data.data.moves);
-            chessBoard.update(data.data.fen, legalMoves, data.data.player);
-            break
-        case 'move':
-            legalMoves = new Set(data.data.moves);
-            chessBoard.update(data.data.fen, legalMoves);
-            break;
-        case 'error':
-            console.error(data.error);
-            break;
-    }
-}
-
-
-/** Function to inspect an object
-  * @param {Object} obj - The object to inspect
-  * @param {function(Object, string): boolean} filter - The filter function to use
-  * @returns {void}
-  */
-const inspect = (obj, filter) => {
-    for (let key in obj) {
-        if (filter(obj, key)) {
-            console.log(key, obj[key]);
-        }
-    }
+    return sendMove;
 }

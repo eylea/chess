@@ -1,6 +1,11 @@
 const WHITE = 'w';
 const BLACK = 'b';
 
+
+/**
+ * Object containing Unicode symbols for chess pieces
+ * @type {Object.<string, string>}
+ */
 const PIECES = {
     'r': '♜',
     'n': '♞',
@@ -16,6 +21,10 @@ const PIECES = {
     'P': '♙',
 };
 
+/**
+ * Object containing filenames for chess piece SVG images
+ * @type {Object.<string, string>}
+ */
 const PIECE_FILES = {
     'r': 'rook-b.svg',
     'n': 'knight-b.svg',
@@ -31,31 +40,62 @@ const PIECE_FILES = {
     'P': 'pawn-w.svg',
 };
 
+/**
+ * Default FEN string for the initial chess position
+ * @type {string}
+ */
 const DEFAULT_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
 
+
 /**
-  * @returns {Array} An array of valid moves for the current player
-  */
+ * Gets valid moves for the current player
+ * @returns {string[]} An array of valid moves for the current player
+ */
 let getValidMoves = () => {
     return [];
 }
 
+/**
+ * Gets the color of the current player
+ * @returns {string} The color of the current player ('w' or 'b')
+ */
 let getColor = () => {
     return '';
 }
 
+/**
+ * Gets the current player
+ * @returns {string} The current player ('w' or 'b')
+ */
 let getCurrentPlayer = () => {
     return '';
 }
 
+/**
+ * Gets the current FEN string
+ * @returns {string} The current FEN string
+ */
 let getFen = () => {
     return '';
 }
 
+/**
+ * Sends a move to the server
+ * @param {string} move - The move in algebraic notation
+ */
 let sendMove = function(move) { console.log('Move:', move) };
 
+/**
+ * Stores the last move made
+ * @type {string|null}
+ */
 let lastMove = null;
 
+/**
+ * Initiates a game connection based on the game ID input
+ * If a game ID is provided, it connects to that game
+ * Otherwise, it fetches a new game from the server
+ */
 const getGame = () => {
     const gameIdInput = document.getElementById('game-id-input');
     if (!gameIdInput) {
@@ -72,6 +112,9 @@ const getGame = () => {
     }
 }
 
+/**
+ * Fetches a new game from the server
+ */
 const fetchNewGame = () => {
     console.log('Fetching new game...');
     fetch('/game')
@@ -83,6 +126,10 @@ const fetchNewGame = () => {
         .catch(error => console.error(error));
 }
 
+/**
+ * Connects to a game with the given ID
+ * @param {string} gameId - The ID of the game to connect to
+ */
 const connectToGame = (gameId) => {
     console.log(`Connecting to game: ${gameId}`);
     const url = new URL(window.location.href);
@@ -94,6 +141,10 @@ const connectToGame = (gameId) => {
     sendMove = makeSendMove(ws);
 }
 
+/**
+ * Updates the game ID header in the DOM
+ * @param {string} gameId - The ID of the current game
+ */
 const updateGameIdHeader = (gameId) => {
     let header = document.getElementById('game_id');
     if (!header) {
@@ -103,6 +154,10 @@ const updateGameIdHeader = (gameId) => {
     }
 }
 
+/**
+ * Loads chess piece assets
+ * @returns {Promise<Object.<string, HTMLImageElement>>} - A promise that resolves to an object containing loaded image elements
+ */
 const loadAssets = async () => {
     const assets = {};
     const loadPromises = Object.entries(PIECE_FILES).map(([key, value]) => {
@@ -127,6 +182,11 @@ const loadAssets = async () => {
     return assets;
 };
 
+/**
+ * Draws the chess board in the given container
+ * @param {HTMLElement} container - The container element for the chess board
+ * @returns {HTMLTableElement} The created chess board element
+ */
 const drawBoard = (container) => {
     if (!container) {
         throw new Error('Container not found');
@@ -160,6 +220,13 @@ const drawBoard = (container) => {
     return board;
 }
 
+/**
+ * Draws chess pieces on the board based on the given FEN string
+ * @param {HTMLTableElement} board - The chess board element
+ * @param {Object.<string, HTMLImageElement>} assets - The loaded chess piece assets
+ * @param {string} [fen=DEFAULT_FEN] - The FEN string representing the board position
+ * @returns {HTMLTableElement} The updated chess board element
+ */
 const drawPieces = (board, assets, fen = DEFAULT_FEN) => {
     const rows = fen.split('/');
     const isBlack = getColor() === BLACK;
@@ -191,7 +258,12 @@ const drawPieces = (board, assets, fen = DEFAULT_FEN) => {
 
     return board;
 }
-
+/**
+ * Checks if a move is a castling move
+ * @param {string} startSquare - The starting square of the move
+ * @param {string} endSquare - The ending square of the move
+ * @returns {boolean} True if the move is a castling move, false otherwise
+ */
 const isCastlingMove = (startSquare, endSquare) => {
     const castlingMoves = {
         'e1g1': true, // White kingside
@@ -202,6 +274,11 @@ const isCastlingMove = (startSquare, endSquare) => {
     return castlingMoves[`${startSquare}${endSquare}`] || false;
 };
 
+/**
+ * Gets the rook's starting and ending squares for a castling move
+ * @param {string} endSquare - The king's ending square in a castling move
+ * @returns {Object|null} An object containing the rook's start and end squares, or null if not a valid castling move
+ */
 const getRookCastlingSquares = (endSquare) => {
     const rookMoves = {
         'g1': { start: 'h1', end: 'f1' }, // White kingside
@@ -212,6 +289,12 @@ const getRookCastlingSquares = (endSquare) => {
     return rookMoves[endSquare] || null;
 };
 
+/**
+ * Moves a piece on the board
+ * @param {HTMLTableElement} board - The chess board element
+ * @param {string} startSquare - The starting square of the move
+ * @param {string} endSquare - The ending square of the move
+ */
 const movePiece = (board, startSquare, endSquare) => {
     const startCell = board.querySelector(`td[data-algebraic="${startSquare}"]`);
     const endCell = board.querySelector(`td[data-algebraic="${endSquare}"]`);
@@ -223,7 +306,11 @@ const movePiece = (board, startSquare, endSquare) => {
     }
 };
 
-// New function to highlight the last move
+/**
+ * Highlights the last move on the board
+ * @param {HTMLTableElement} board - The chess board element
+ * @param {string} move - The move to highlight in algebraic notation
+ */
 const highlightLastMove = (board, move) => {
     // Remove previous highlights
     board.querySelectorAll('.highlight').forEach(cell => cell.classList.remove('highlight'));
@@ -242,15 +329,20 @@ const highlightLastMove = (board, move) => {
 };
 
 /**
-  * Returns an array of valid cells from a given cell
-  * @param {string} position - The algebraic position of the cell
-  * @returns {Array} An array of valid moves from the given cell
-  */
+ * Gets valid moves from a given cell
+ * @param {string} position - The algebraic position of the cell
+ * @returns {string[]} An array of valid moves from the given cell
+ */
 const getValidCellsFromCell = (position) => {
     const validMoves = getValidMoves();
     return validMoves.filter(move => move.startsWith(position)).map(move => move.substring(2));
 }
 
+/**
+ * Draws valid moves for a selected piece
+ * @param {HTMLTableElement} board - The chess board element
+ * @param {string} position - The algebraic position of the selected piece
+ */
 const drawValidMoves = (board, position) => {
     const cell = board.querySelector(`td[data-algebraic="${position}"]`);
     const piece = cell.querySelector('.piece');
@@ -270,16 +362,29 @@ const drawValidMoves = (board, position) => {
     });
 }
 
+
+/**
+ * Clears valid move highlights from the board
+ */
 const clearValidMoves = () => {
     document.querySelectorAll('.valid-move').forEach(cell => cell.classList.remove('valid-move'));
 }
 
+/**
+ * Adds event listeners to chess pieces for drag-and-drop functionality
+ * @param {HTMLTableElement} board - The chess board element
+ */
 const addPieceEventListeners = (board) => {
     const pieces = board.querySelectorAll('.piece');
     pieces.forEach((img) => {
         let isDragging = false;
         let originalCell;
 
+        // Event handlers
+        /**
+         * Handles the mousedown event on a chess piece
+         * @param {MouseEvent} e - The mousedown event
+         */
         const handleMouseDown = (e) => {
             isDragging = true;
             originalCell = img.parentElement;
@@ -291,6 +396,11 @@ const addPieceEventListeners = (board) => {
             drawValidMoves(board, originalCell.dataset.algebraic)
         };
 
+
+        /**
+         * Handles the mousemove event on a chess piece
+         * @param {MouseEvent} e - The mousedown event
+         */
         const handleMouseMove = (e) => {
             if (isDragging) {
                 img.style.left = `${e.clientX - img.width / 2}px`;
@@ -298,6 +408,10 @@ const addPieceEventListeners = (board) => {
             }
         };
 
+        /**
+         * Handles the mouseup event on a chess piece
+         * @param {MouseEvent} e - The mousedown event
+         */
         const handleMouseUp = (e) => {
             clearValidMoves();
             if (isDragging) {
@@ -355,6 +469,11 @@ const addPieceEventListeners = (board) => {
     });
 };
 
+
+/**
+ * Handles incoming WebSocket messages
+ * @param {MessageEvent} event - The WebSocket message event
+ */
 const handleOnMessage = (event) => {
     console.log('Message received:', event.data);
     const data = JSON.parse(event.data);
@@ -370,12 +489,26 @@ const handleOnMessage = (event) => {
     handler(data.data);
 };
 
+/**
+ * Handles the initial game message
+ * @param {Object} data - The initial game data
+ * @param {string} data.player - The player's color
+ * @param {string} data.fen - The initial FEN string
+ * @param {string[]} data.moves - The list of valid moves
+ */
 const handleInitialMessage = (data) => {
     getColor = () => data.player[0];
     updateGameState(data.fen, data.moves);
     initializeBoard();
 };
 
+/**
+ * Handles a move message
+ * @param {Object} data - The move data
+ * @param {string} data.fen - The new FEN string after the move
+ * @param {string[]} data.moves - The new list of valid moves
+ * @param {string} data.move - The move that was made
+ */
 const handleMoveMessage = (data) => {
     updateGameState(data.fen, data.moves);
     const board = document.getElementById('board');
@@ -390,10 +523,18 @@ const handleMoveMessage = (data) => {
     }
 };
 
+/**
+ * Handles an error message
+ * @param {string} message - The error message
+ */
 const handleErrorMessage = (message) => {
     alert(message);
 };
 
+/**
+ * Handles the game over message
+ * @param {string} loser - The color of the losing player
+ */
 const handleGameOverMessage = (loser) => {
     const winner = loser === WHITE ? BLACK : WHITE;
     const messageElement = document.createElement('div');
@@ -424,12 +565,20 @@ const handleGameOverMessage = (loser) => {
     });
 };
 
+/**
+ * Updates the game state
+ * @param {string} fen - The new FEN string
+ * @param {string[]} moves - The new list of valid moves
+ */
 const updateGameState = (fen, moves) => {
     getFen = () => fen;
     getCurrentPlayer = () => fen.split(' ')[1];
     getValidMoves = () => moves;
 };
 
+/**
+ * Initializes the chess board
+ */
 const initializeBoard = () => {
     const container = document.getElementById('container');
     loadAssets().then((assets) => {
@@ -439,6 +588,11 @@ const initializeBoard = () => {
     });
 };
 
+/**
+ * Creates a function to send moves to the server
+ * @param {WebSocket} ws - The WebSocket connection
+ * @returns {function(string): void} A function that sends a move to the server
+ */
 const makeSendMove = (ws) => {
     const sendMove = (move) => {
         if (getCurrentPlayer() !== getColor()) {

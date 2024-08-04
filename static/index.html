@@ -12,8 +12,11 @@
         }
 
         td {
+            table-layout: fixed;
             width: 10vh;
+            min-width: 10vh;
             height: 10vh;
+            min-height: 10vh;
             text-align: center;
             /* Horizontal centering */
             vertical-align: middle;
@@ -26,8 +29,9 @@
 
         .piece {
             cursor: pointer;
-            width: 80%;
-            height: 80%;
+            width: calc(0.8 * 10vh);
+            height: calc(0.8 * 10vh);
+            transition: transform 0.3s ease-in-out;
         }
 
         .white {
@@ -48,50 +52,15 @@
 </head>
 
 
-<!-- <body> -->
-<!--     <h1>Chess Game</h1> -->
-<!--     <button id="getGameButton"> -->
-<!--         Get Game -->
-<!--     </button> -->
-<!--     <canvas id="chessBoard"></canvas> -->
-<!--     <script> -->
-<!--         getGameButton = document.getElementById('getGameButton'); -->
-<!--         getGameButton.addEventListener('click', handleGetGame); -->
-<!--     </script> -->
-<!-- </body> -->
 
 <body>
-    <script src="chess.js"></script>
+    <script src="chess2.js"></script>
     <div id="container"></div>
-    <button id="get-game-button">Get Game</button>
-    <button id="reset-button">Reset Position</button>
+    <button onclick="getGame()">Get Game</button>
+    <input type="text" id="game-id-input">
     <script>
-        const handleGetGame = () => {
-            fetch('http://localhost:8080/game')
-                .then(response => response.json())
-                .then(data => {
-                    const container = document.getElementById('container');
-                    const ws = new WebSocket('ws://localhost:8080/game/' + data.game_id);
-                    ws.onopen = () => {
-                        console.log('Connected to server');
-                    };
-
-                    ws.onmessage = (message) => {
-                        // Only create the ChessBoard instance once upon receiving the first message
-                        if (!container.chessBoard) {
-                            container.chessBoard = new ChessBoard(container, makeHandleOnMove(ws));
-                        }
-                        handleOnMessage(container.chessBoard)(message);
-                    };
-                });
-        };
-
-        const button = document.getElementById('get-game-button');
-        button.addEventListener('click', handleGetGame);
 
     </script>
-
-
 </body>
 
 </html>

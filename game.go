@@ -28,7 +28,10 @@ func newGame() *Game {
 		unregister: make(chan *Client),
 		game:       chess.NewGame(),
 		id:         uuid.New().String(),
-		players:    make(map[Player]*Client),
+		players: map[Player]*Client{
+			White: nil,
+			Black: nil,
+		},
 	}
 }
 
@@ -40,6 +43,12 @@ func (g *Game) run() {
 		case client := <-g.unregister:
 			if _, ok := g.clients[client]; ok {
 				log.Println("unregistering client")
+
+				for p, c := range g.players {
+					if c == client {
+						g.players[p] = nil
+					}
+				}
 				delete(g.clients, client)
 				close(client.send)
 			}
@@ -57,6 +66,11 @@ func (g *Game) run() {
 				default:
 					close(client.send)
 					delete(g.clients, client)
+					for p, c := range g.players {
+						if c == client {
+							g.players[p] = nil
+						}
+					}
 				}
 			}
 		}
@@ -83,6 +97,7 @@ func (g *Game) handleClientMove(msg *Message) *ServerMessage {
 	log.Printf("game state: %s", g.game.Position().Board().Draw())
 
 	return NewServerMoveMessage(
+		move.String(),
 		g.game.FEN(),
 		g.getLegalMoves(),
 	)
@@ -119,11 +134,12 @@ func (g *Game) handleRegisterClient(client *Client) {
 		},
 	}
 
+	// assign a random color to the player if there are no players
 	if len(g.clients) == 0 {
 		color := randomPlayer()
 		g.players[color] = client
 		msg.Data.(*ServerInitialMessage).Player = color
-	} else {
+	} else { // if there are players, assign the other color
 		for color, c := range g.players {
 			if c == nil {
 				g.players[color] = client

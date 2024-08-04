@@ -77,9 +77,9 @@ class ChessBoard {
         this.assets = {};
         this._loadAssets();
 
+        this._boardInitialized = false;
         this._initializeBoard();
         this._drawPosition();
-
         /**
          * @property {function(string, string): void} onMove - The function to call when a move is made
          * @private
@@ -105,6 +105,9 @@ class ChessBoard {
         * @type {string}
         */
         this.color = color;
+
+
+        this.cellSize = 50;
     }
 
     /**
@@ -117,7 +120,9 @@ class ChessBoard {
         this.fen = fen;
         this.legalMoves = legalMoves
         this.color = color;
-        this._drawPosition();
+        if (fen.split(' ')[1] != this.color) {
+            this._drawPosition();
+        }
     }
 
     /**
@@ -185,7 +190,52 @@ class ChessBoard {
                 const piece = position[i][j];
                 cell.childNodes.forEach(child => child.remove());
                 if (this.assets[piece]) {
-                    cell.appendChild(this.assets[piece].cloneNode(true))
+                    const img = this.assets[piece].cloneNode(true)
+                    let isDragging = false;
+                    let offsetX, offsetY;
+                    let startCell, endCell;
+                    img.style.width = `${this.cellSize}px`;
+                    img.style.height = `${this.cellSize}px`;
+
+                    img.addEventListener('dragstart', (e) => {
+                        e.preventDefault();
+                    })
+
+                    img.addEventListener('mousedown', (e) => {
+                        isDragging = true;
+                        img.style.position = 'absolute';
+                        img.style.cursor = 'grabbing';
+
+                        // Calculate the offset
+                        offsetX = e.clientX - img.getBoundingClientRect().left;
+                        offsetY = e.clientY - img.getBoundingClientRect().top;
+
+                        // Ensure the image follows the cursor at the start of dragging
+                        img.style.left = `${e.clientX - img.width / 2}px`;
+                        img.style.top = `${e.clientY - img.height / 2}px`;
+
+                        startCell = document.elementFromPoint(e.clientX, e.clientY).closest('td');
+                        console.log('Start cell:', startCell);
+                    });
+
+                    document.addEventListener('mousemove', (e) => {
+                        if (isDragging) {
+                            img.style.left = `${e.clientX - img.width / 2}px`;
+                            img.style.top = `${e.clientY - img.height / 2}px`;
+                        }
+                    });
+
+                    document.addEventListener('mouseup', (e) => {
+                        isDragging = false;
+                        img.style.cursor = 'grab';
+                        endCell = document.elementFromPoint(e.clientX, e.clientY).closest('td');
+                        console.log('end cell:', endCell);
+                        if (startCell !== endCell) {
+                            this._handleMove(startCell, endCell);
+                        }
+                    });
+                    cell.appendChild(img);
+
                 }
             }
         }
@@ -228,7 +278,7 @@ class ChessBoard {
      */
     _initializeCellSelection() {
         const cells = this._getAllCells();
-
+        this.cellSize = cells[0].getBoundingClientRect().width;
 
         /**
          * Log the start and end cells of a selection
@@ -315,9 +365,37 @@ class ChessBoard {
             return;
         }
 
+        this._movePiece(startCell, endCell);
+
         this.onMove(startAlgebraic, endAlgebraic);
     }
 
+    /**
+      * Move a piece on the board
+      * @param {HTMLTableCellElement} startCell - The start cell of the move
+      * @param {HTMLTableCellElement} endCell - The end cell of the move
+      * @private
+      */
+    _movePiece = (startCell, endCell) => {
+        // remove the piece from the start cell
+        const startPiece = startCell.querySelector('.piece');
+        if (!startPiece) {
+            console.log('No piece to move');
+            return;
+        }
+        startPiece.remove();
+
+        // remove the piece from the end cell if it exists
+        const endPiece = endCell.querySelector('.piece');
+        if (endPiece) {
+            endPiece.remove();
+        }
+
+
+        // move the piece to the end cell
+        endCell.appendChild(startPiece);
+
+    }
 
     /** Convert a FEN string to a 2D array representing the board
       * @param {string} fen - The FEN string to convert

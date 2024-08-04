@@ -98,6 +98,7 @@ func NewServerMessage(t MessageType, data interface{}) *ServerMessage {
 type ServerMoveMessage struct {
 	Fen        string   `json:"fen"`
 	LegalMoves []string `json:"moves"`
+	Move       string   `json:"move"`
 }
 
 type ServerInitialMessage struct {
@@ -117,10 +118,11 @@ func NewServerInitialMessage(fen string, moves []string, player Player) *ServerM
 	}
 }
 
-func NewServerMoveMessage(fen string, moves []string) *ServerMessage {
+func NewServerMoveMessage(move, fen string, moves []string) *ServerMessage {
 	return &ServerMessage{
 		Type: Move,
 		Data: &ServerMoveMessage{
+			Move:       move,
 			Fen:        fen,
 			LegalMoves: moves,
 		},

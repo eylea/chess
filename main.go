@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 
 	"net/http"
@@ -86,46 +85,9 @@ func main() {
 		serveGame(g, w, r)
 	})
 
-	go func() {
-		if err := http.ListenAndServe(*addr, nil); err != nil {
-			log.Fatal("ListenAndServe:", err)
-		}
-	}()
 	log.Println("server started on ", *addr)
-
-	cmds := make(chan string)
-	go func() {
-		for {
-			var cmd string
-			_, err := fmt.Scanln(&cmd)
-			if err != nil {
-				log.Println(err)
-			}
-			cmds <- cmd
-		}
-	}()
-
-	for {
-		select {
-		case cmd := <-cmds:
-			switch cmd {
-			case "list":
-				if len(gh.games) == 0 {
-					fmt.Println("no games")
-					break
-				}
-				for _, g := range gh.games {
-					fmt.Println(g)
-				}
-
-			case "exit":
-				return
-
-			default:
-				fmt.Println("unknown command, valid commands are: list, exit")
-			}
-
-		}
+	if err := http.ListenAndServe(*addr, nil); err != nil {
+		log.Fatal("ListenAndServe:", err)
 	}
 
 }

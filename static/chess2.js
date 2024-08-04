@@ -31,7 +31,6 @@ const PIECE_FILES = {
     'P': 'pawn-w.svg',
 };
 
-
 const DEFAULT_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR';
 
 let getValidMoves = () => {
@@ -52,6 +51,7 @@ let getFen = () => {
 
 let sendMove = function(move) { console.log('Move:', move) };
 
+let lastMove = null;
 
 const getGame = () => {
     const gameIdInput = document.getElementById('game-id-input');
@@ -99,23 +99,16 @@ const updateGameIdHeader = (gameId) => {
     }
 }
 
-/**
- * Load chess piece assets and create image elements for each piece.
- * 
- * @returns {Promise<Object<string, HTMLImageElement>>} A promise that resolves to an object with piece names as keys and image elements as values.
- */
 const loadAssets = async () => {
-    // Convert PIECE_FILES entries to an array of key-value pairs
     const assets = Object.entries(PIECE_FILES).reduce((acc, [key, value]) => {
         const img = document.createElement('img');
         img.src = `./${value}`;
         img.alt = PIECES[key];
         img.className = 'piece no-select';
-        acc[key] = img; // Store the image element in the accumulator
+        acc[key] = img;
         return acc;
     }, {});
 
-    // Wait for all images to load
     await Promise.all(Object.values(assets).map((img) => {
         return new Promise((resolve, reject) => {
             img.onload = resolve;
@@ -123,15 +116,9 @@ const loadAssets = async () => {
         });
     }));
 
-    return assets; // Return the assets object when all images are loaded
+    return assets;
 };
 
-
-/**
-  * Draw the chess board in the given container
-  * @param {HTMLElement} container - The container to draw the board in
-  * @return {HTMLTableElement} The board element
-  */
 const drawBoard = (container) => {
     if (!container) {
         throw new Error('Container not found');
@@ -161,13 +148,6 @@ const drawBoard = (container) => {
     return board;
 }
 
-/**
- * Draw the pieces on the board
- * @param {HTMLTableElement} board - The container to draw the pieces in
- * @param {Object<string, HTMLImageElement>} assets - The assets object with piece names as keys and image elements as values
- * @param {string} fen - The FEN string representing the board state
- * @return {HTMLTableElement} The board element
- */
 const drawPieces = (board, assets, fen = DEFAULT_FEN) => {
     const rows = fen.split('/');
     for (let i = 0; i < 8; i++) {
@@ -178,7 +158,7 @@ const drawPieces = (board, assets, fen = DEFAULT_FEN) => {
             if (isNaN(char)) {
                 const cell = board.rows[i].cells[col];
                 const img = assets[char].cloneNode(true);
-                img.classList.add('piece');  // Ensure pieces have the 'piece' class
+                img.classList.add('piece');
                 cell.appendChild(img);
                 col++;
             } else {
@@ -190,12 +170,6 @@ const drawPieces = (board, assets, fen = DEFAULT_FEN) => {
     return board;
 }
 
-/**
- * Check if a move is a castling move
- * @param {string} startSquare - The starting square of the move
- * @param {string} endSquare - The ending square of the move
- * @return {boolean} True if the move is a castling move, false otherwise
- */
 const isCastlingMove = (startSquare, endSquare) => {
     const castlingMoves = {
         'e1g1': true, // White kingside
@@ -206,11 +180,6 @@ const isCastlingMove = (startSquare, endSquare) => {
     return castlingMoves[`${startSquare}${endSquare}`] || false;
 };
 
-/**
- * Get the rook's start and end positions for a castling move
- * @param {string} endSquare - The king's end square
- * @return {Object} An object containing the rook's start and end squares
- */
 const getRookCastlingSquares = (endSquare) => {
     const rookMoves = {
         'g1': { start: 'h1', end: 'f1' }, // White kingside
@@ -221,12 +190,6 @@ const getRookCastlingSquares = (endSquare) => {
     return rookMoves[endSquare] || null;
 };
 
-/**
- * Move a piece on the board
- * @param {HTMLTableElement} board - The chess board
- * @param {string} startSquare - The starting square
- * @param {string} endSquare - The ending square
- */
 const movePiece = (board, startSquare, endSquare) => {
     const startCell = board.querySelector(`td[data-algebraic="${startSquare}"]`);
     const endCell = board.querySelector(`td[data-algebraic="${endSquare}"]`);
@@ -238,13 +201,25 @@ const movePiece = (board, startSquare, endSquare) => {
     }
 };
 
+// New function to highlight the last move
+const highlightLastMove = (board, move) => {
+    // Remove previous highlights
+    board.querySelectorAll('.highlight').forEach(cell => cell.classList.remove('highlight'));
 
-/**
- * Add event listeners to the board
- * @param {HTMLTableElement} board - The board element
- */
+    // Highlight new move
+    const startSquare = move.substring(0, 2);
+    const endSquare = move.substring(2, 4);
+
+    const startCell = board.querySelector(`td[data-algebraic="${startSquare}"]`);
+    const endCell = board.querySelector(`td[data-algebraic="${endSquare}"]`);
+
+    if (startCell && endCell) {
+        startCell.classList.add('highlight');
+        endCell.classList.add('highlight');
+    }
+};
+
 const addPieceEventListeners = (board) => {
-    // Add event listeners to pieces
     const pieces = board.querySelectorAll('.piece');
     pieces.forEach((img) => {
         let isDragging = false;
@@ -291,16 +266,13 @@ const addPieceEventListeners = (board) => {
                     return;
                 }
 
-
                 if (getCurrentPlayer() !== getColor()) {
                     console.log('Not your turn');
                     return;
                 }
 
-                // Handle regular move
                 movePiece(board, startSquare, endSquare);
 
-                // Handle castling
                 if (isCastlingMove(startSquare, endSquare)) {
                     const rookSquares = getRookCastlingSquares(endSquare);
                     if (rookSquares) {
@@ -309,6 +281,9 @@ const addPieceEventListeners = (board) => {
                 }
 
                 sendMove(move);
+
+                // Highlight the move
+                highlightLastMove(board, move);
             }
         };
 
@@ -322,12 +297,6 @@ const addPieceEventListeners = (board) => {
     });
 };
 
-
-
-/**
- * Handle the 'message' event from the WebSocket connection
- * @param {MessageEvent} event - The message event
- */
 const handleOnMessage = (event) => {
     console.log('Message received:', event.data);
     const data = JSON.parse(event.data);
@@ -351,12 +320,12 @@ const handleInitialMessage = (data) => {
 
 const handleMoveMessage = (data) => {
     updateGameState(data.fen, data.moves);
-    // if (getCurrentPlayer() !== getColor()) {
-    //     return
-    // }
     const board = document.getElementById('board');
     console.log('Move:', data.move);
     movePiece(board, data.move.substring(0, 2), data.move.substring(2, 4));
+
+    // Highlight the last move
+    highlightLastMove(board, data.move);
 };
 
 const handleErrorMessage = (message) => {
@@ -382,18 +351,7 @@ const initializeBoard = () => {
     });
 };
 
-/**
- * Create a function that sends a move to the server.
- * @param {WebSocket} ws - The WebSocket connection.
- * @return {Function} A function that sends a move to the server.
- */
 const makeSendMove = (ws) => {
-
-    /**
-     * Send a move to the server.
-     * @param {string} move - The move to send.
-     * @return {void}
-     */
     const sendMove = (move) => {
         if (getCurrentPlayer() !== getColor()) {
             console.log('Not your turn');

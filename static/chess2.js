@@ -1,5 +1,5 @@
-const WHITE = 'white';
-const BLACK = 'black';
+const WHITE = 'w';
+const BLACK = 'b';
 
 const PIECES = {
     'r': '♜',
@@ -100,22 +100,25 @@ const updateGameIdHeader = (gameId) => {
 }
 
 const loadAssets = async () => {
-    const assets = Object.entries(PIECE_FILES).reduce((acc, [key, value]) => {
-        const img = document.createElement('img');
-        img.src = `./${value}`;
-        img.alt = PIECES[key];
-        img.className = 'piece no-select';
-        acc[key] = img;
-        return acc;
-    }, {});
-
-    await Promise.all(Object.values(assets).map((img) => {
-        return new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
+    const assets = {};
+    const loadPromises = Object.entries(PIECE_FILES).map(([key, value]) => {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.src = `./${value}`;
+            img.alt = PIECES[key];
+            img.className = 'piece no-select';
+            img.onload = () => {
+                assets[key] = img;
+                resolve({});
+            };
+            img.onerror = () => {
+                console.error(`Failed to load image: ${value}`);
+                resolve({}); // Resolve even on error to continue loading other assets
+            };
         });
-    }));
+    });
 
+    await Promise.all(loadPromises);
     return assets;
 };
 
@@ -132,12 +135,16 @@ const drawBoard = (container) => {
     board = document.createElement('table');
     board.id = 'board';
 
+    const isBlack = getColor() === BLACK;
+
     for (let i = 0; i < 8; i++) {
         const row = document.createElement('tr');
         for (let j = 0; j < 8; j++) {
             const cell = document.createElement('td');
             cell.className = (i + j) % 2 === 0 ? 'white' : 'black';
-            cell.dataset.algebraic = `${String.fromCharCode(97 + j)}${8 - i}`;
+            const file = isBlack ? 7 - j : j;
+            const rank = isBlack ? i + 1 : 8 - i;
+            cell.dataset.algebraic = `${String.fromCharCode(97 + file)}${rank}`;
             row.appendChild(cell);
         }
         board.appendChild(row);
@@ -150,16 +157,26 @@ const drawBoard = (container) => {
 
 const drawPieces = (board, assets, fen = DEFAULT_FEN) => {
     const rows = fen.split('/');
+    const isBlack = getColor() === BLACK;
+
     for (let i = 0; i < 8; i++) {
-        const row = rows[i];
+        const row = rows[isBlack ? 7 - i : i];
         let col = 0;
         for (let j = 0; j < row.length; j++) {
             const char = row[j];
+            console.log("char", char)
             if (isNaN(char)) {
-                const cell = board.rows[i].cells[col];
-                const img = assets[char].cloneNode(true);
+                const cell = board.rows[i].cells[isBlack ? 7 - col : col];
+                let img = assets[char]
+                if (!img) {
+                    console.error(`Failed to find asset for piece: ${char}`);
+                    img = document.createElement('span');
+                    img.textContent = PIECES[char];
+                    img.className = 'piece no-select';
+                    continue
+                }
                 img.classList.add('piece');
-                cell.appendChild(img);
+                cell.appendChild(img.cloneNode(true));
                 col++;
             } else {
                 col += parseInt(char);
@@ -321,19 +338,49 @@ const handleInitialMessage = (data) => {
 const handleMoveMessage = (data) => {
     updateGameState(data.fen, data.moves);
     const board = document.getElementById('board');
-    console.log('Move:', data.move);
     movePiece(board, data.move.substring(0, 2), data.move.substring(2, 4));
 
     // Highlight the last move
     highlightLastMove(board, data.move);
+
+    // Check if the game is over
+    if (data.moves.length === 0) {
+        handleGameOverMessage(getCurrentPlayer());
+    }
 };
 
 const handleErrorMessage = (message) => {
     alert(message);
 };
 
-const handleGameOverMessage = () => {
-    alert('Game Over');
+const handleGameOverMessage = (loser) => {
+    const winner = loser === WHITE ? BLACK : WHITE;
+    const messageElement = document.createElement('div');
+    messageElement.id = 'game-over-message';
+    messageElement.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        font-size: 24px;
+        text-align: center;
+        z-index: 1001;
+    `;
+    messageElement.innerHTML = `
+        <h2>Game Over!</h2>
+        <p>${winner === WHITE ? 'White' : 'Black'} wins!</p>
+        <button id="new-game-btn">Start New Game</button>
+    `;
+    document.body.appendChild(messageElement);
+
+    document.getElementById('new-game-btn').addEventListener('click', () => {
+        document.body.removeChild(messageElement);
+        fetchNewGame();
+    });
 };
 
 const updateGameState = (fen, moves) => {
@@ -344,9 +391,9 @@ const updateGameState = (fen, moves) => {
 
 const initializeBoard = () => {
     const container = document.getElementById('container');
-    const board = drawBoard(container);
     loadAssets().then((assets) => {
-        drawPieces(board, assets);
+        const board = drawBoard(container);
+        drawPieces(board, assets, getFen().split(' ')[0]);
         addPieceEventListeners(board);
     });
 };

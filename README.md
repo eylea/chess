@@ -1,0 +1,18 @@
+# CHESS SERVER AND CLIENT
+
+SERVER IS WRITTEN IN GO
+
+CLIENT IS WRITTEN IN VANILLA JS
+
+
+## USAGE
+```
+make run
+```
+
+OR
+
+```
+go run main.go
+```
+

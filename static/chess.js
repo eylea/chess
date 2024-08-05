@@ -26,18 +26,18 @@ const PIECES = {
  * @type {Object.<string, string>}
  */
 const PIECE_FILES = {
-    'r': 'rook-b.svg',
-    'n': 'knight-b.svg',
-    'b': 'bishop-b.svg',
-    'q': 'queen-b.svg',
-    'k': 'king-b.svg',
-    'p': 'pawn-b.svg',
-    'R': 'rook-w.svg',
-    'N': 'knight-w.svg',
-    'B': 'bishop-w.svg',
-    'Q': 'queen-w.svg',
-    'K': 'king-w.svg',
-    'P': 'pawn-w.svg',
+    'r': 'assets/rook-b.svg',
+    'n': 'assets/knight-b.svg',
+    'b': 'assets/bishop-b.svg',
+    'q': 'assets/queen-b.svg',
+    'k': 'assets/king-b.svg',
+    'p': 'assets/pawn-b.svg',
+    'R': 'assets/rook-w.svg',
+    'N': 'assets/knight-w.svg',
+    'B': 'assets/bishop-w.svg',
+    'Q': 'assets/queen-w.svg',
+    'K': 'assets/king-w.svg',
+    'P': 'assets/pawn-w.svg',
 };
 
 /**
@@ -90,6 +90,10 @@ let sendMove = function(move) { console.log('Move:', move) };
  * @type {string|null}
  */
 let lastMove = null;
+
+
+let arrowStartSquare;
+let arrowLayer;
 
 /**
  * Initiates a game connection based on the game ID input
@@ -386,6 +390,7 @@ const addPieceEventListeners = (board) => {
          * @param {MouseEvent} e - The mousedown event
          */
         const handleMouseDown = (e) => {
+            if (e.button !== 0) return;
             isDragging = true;
             originalCell = img.parentElement;
             img.style.cursor = 'grabbing';
@@ -585,6 +590,7 @@ const initializeBoard = () => {
         const board = drawBoard(container);
         drawPieces(board, assets, getFen().split(' ')[0]);
         addPieceEventListeners(board);
+        initializeArrowDrawing(board)
     });
 };
 
@@ -609,4 +615,171 @@ const makeSendMove = (ws) => {
     }
 
     return sendMove;
+}
+
+function initializeArrowDrawing(board) {
+    arrowLayer = document.createElement('div');
+    arrowLayer.id = 'arrow-layer';
+    arrowLayer.style.position = 'absolute';
+    arrowLayer.style.top = '0';
+    arrowLayer.style.left = '0';
+    arrowLayer.style.width = '100%';
+    arrowLayer.style.height = '100%';
+    arrowLayer.style.pointerEvents = 'none';
+    board.parentNode.appendChild(arrowLayer);
+
+    board.addEventListener('contextmenu', handleRightClick);
+    board.addEventListener('mousedown', handleMouseDown);
+    board.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('keydown', handleKeyDown);
+}
+
+const handleKeyDown = (event) => {
+    if (event.key === 'Escape') {
+        clearArrows();
+    }
+}
+
+const handleRightClick = (event) => {
+    event.preventDefault();
+}
+
+const handleMouseDown = (event) => {
+    if (event.button === 2) {
+        const cell = event.target.closest('td');
+        if (cell) {
+            arrowStartSquare = cell.dataset.algebraic;
+        }
+        return
+    }
+
+    clearArrows();
+}
+
+const handleMouseUp = (event) => {
+    if (event.button === 2 && arrowStartSquare) { // Right mouse button
+        const cell = event.target.closest('td');
+        if (cell) {
+            const endSquare = cell.dataset.algebraic;
+            if (arrowStartSquare !== endSquare) {
+                drawArrow(arrowStartSquare, endSquare);
+            }
+        }
+        arrowStartSquare = null;
+    }
+}
+
+const isKnightMove = (from, to) => {
+    const dx = Math.abs(from.charCodeAt(0) - to.charCodeAt(0));
+    const dy = Math.abs(parseInt(from[1]) - parseInt(to[1]));
+    return (dx === 1 && dy === 2) || (dx === 2 && dy === 1);
+}
+
+/**
+ * Determines the turning square for a valid knight move, favoring cardinal directions.
+ * @param {string} start - The starting square (e.g., 'e2').
+ * @param {string} end - The ending square (e.g., 'f4').
+ * @returns {string|null} The turning square if it's a valid knight move, null otherwise.
+ */
+function getTurningSquare(start, end) {
+    if (!isKnightMove(start, end)) {
+        return null;
+    }
+
+    const [startFile, startRank] = start.split('');
+    const [endFile, endRank] = end.split('');
+
+    const rankDiff = Math.abs(parseInt(endRank) - parseInt(startRank));
+
+    if (rankDiff < 2) {
+        // Horizontal first, then vertical
+        return endFile + startRank;
+    }
+    // Vertical first, then horizontal
+    return startFile + endRank;
+}
+
+const drawArrow = (from, to) => {
+    const fromCell = document.querySelector(`td[data-algebraic="${from}"]`);
+    const toCell = document.querySelector(`td[data-algebraic="${to}"]`);
+    const board = document.getElementById('board');
+
+    const fromRect = fromCell.getBoundingClientRect();
+    const toRect = toCell.getBoundingClientRect();
+
+
+    const startX = fromRect.left + fromRect.width / 2;
+    const startY = fromRect.top + fromRect.height / 2;
+    const endX = toRect.left + toRect.width / 2;
+    const endY = toRect.top + toRect.height / 2;
+
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.style.position = 'absolute';
+    svg.style.top = '0';
+    svg.style.left = '0';
+    svg.style.width = '100%';
+    svg.style.height = '100%';
+    svg.style.pointerEvents = 'none';
+
+    let line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+
+    let angle;
+    if (isKnightMove(from, to)) {
+
+        const turningSquare = getTurningSquare(from, to)
+        const midCell = document.querySelector(`td[data-algebraic="${turningSquare}"]`);
+        const midRect = midCell.getBoundingClientRect();
+        const midX = midRect.left + midRect.width / 2;
+        const midY = midRect.top + midRect.height / 2;
+
+        angle = Math.atan2(endY - midY, endX - midX);
+
+        let midline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        // draw a line to the turning square
+        midline.setAttribute('x1', `${startX}`);
+        midline.setAttribute('y1', `${startY}`);
+        midline.setAttribute('x2', `${midX}`);
+        midline.setAttribute('y2', `${midY}`);
+        midline.setAttribute('stroke', 'rgba(0, 180, 30, 0.7)');
+        midline.setAttribute('stroke-width', '6');
+        svg.appendChild(midline);
+
+        line.setAttribute('x1', `${midX}`);
+        line.setAttribute('y1', `${midY}`);
+        line.setAttribute('x2', `${endX}`);
+        line.setAttribute('y2', `${endY}`);
+        line.setAttribute('stroke', 'rgba(0, 180, 30, 0.7)');
+        line.setAttribute('stroke-width', '6');
+    } else {
+        line.setAttribute('x1', `${startX}`);
+        line.setAttribute('y1', `${startY}`);
+        line.setAttribute('x2', `${endX}`);
+        line.setAttribute('y2', `${endY}`);
+        line.setAttribute('stroke', 'rgba(0, 180, 30, 0.7)');
+        line.setAttribute('stroke-width', '6');
+
+        angle = Math.atan2(endY - startY, endX - startX);
+    }
+
+    const arrowHead = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    const arrowSize = 20;
+    const arrowPoints = [
+        [endX, endY],
+        [endX - arrowSize * Math.cos(angle - Math.PI / 6), endY - arrowSize * Math.sin(angle - Math.PI / 6)],
+        [endX - arrowSize * Math.cos(angle + Math.PI / 6), endY - arrowSize * Math.sin(angle + Math.PI / 6)]
+    ];
+    arrowHead.setAttribute('points', arrowPoints.map(point => point.join(',')).join(' '));
+    arrowHead.setAttribute('fill', 'rgba(0, 180, 30, 0.7)');
+    line.setAttribute('stroke-width', '6');
+
+    svg.appendChild(line);
+    svg.appendChild(arrowHead);
+    arrowLayer.appendChild(svg);
+}
+
+const clearArrows = () => {
+    while (arrowLayer.firstChild) {
+        arrowLayer.removeChild(arrowLayer.firstChild);
+    }
 }
